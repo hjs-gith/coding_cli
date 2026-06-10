@@ -1,0 +1,6 @@
+.env
+.venv
+.claude
+.pytest_cache
+.DS_Store
+plan.md
