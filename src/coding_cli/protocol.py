@@ -23,7 +23,7 @@ KNOWN_TOOLS = {
     "use_skill",
 }
 
-_TOOL_BLOCK_RE = re.compile(r"```tool\s*\n(.*?)```", re.DOTALL)
+_TOOL_BLOCK_RE = re.compile(r"```tool\s*(.*?)```", re.DOTALL)
 
 _BASE_PREAMBLE = """\
 You are a coding assistant running inside a terminal CLI on the user's machine.
@@ -39,7 +39,8 @@ else, in this exact form:
 Rules:
 - Emit at most one tool call per message. After you see its TOOL_RESULT, decide
   the next step.
-- Use double-quoted JSON. Do not add commentary around the tool block.
+- Use double-quoted JSON. Do not add commentary around the tool block. If you
+  cannot emit the fence, a bare JSON object on its own is still accepted.
 - When the task is complete, reply normally in plain text (no tool block); that
   text is shown to the user as the final answer.
 
@@ -81,20 +82,8 @@ def build_preamble(skill_catalog: Optional[Iterable[tuple[str, str]]] = None) ->
     return preamble
 
 
-def parse_tool_call(text: str) -> Optional[ToolCall]:
-    """Extract a single tool call from a model reply.
-
-    Returns ``None`` when no ```tool block is present (the reply is a final
-    answer) or when the block is malformed/unknown — callers treat ``None`` as
-    "this is plain text to show the user".
-    """
-    match = _TOOL_BLOCK_RE.search(text or "")
-    if not match:
-        return None
-    try:
-        payload = json.loads(match.group(1).strip())
-    except json.JSONDecodeError:
-        return None
+def _payload_to_call(payload: object) -> Optional[ToolCall]:
+    """Validate a decoded JSON value as a known tool call, else ``None``."""
     if not isinstance(payload, dict):
         return None
     name = payload.get("tool")
@@ -104,6 +93,57 @@ def parse_tool_call(text: str) -> Optional[ToolCall]:
     if not isinstance(args, dict):
         return None
     return ToolCall(name=name, args=args)
+
+
+def _iter_json_objects(text: str) -> Iterable[object]:
+    """Yield every top-level JSON value in ``text``, in order.
+
+    Uses ``raw_decode`` so nested braces and braces inside string values (e.g.
+    ``write_file`` content) are handled correctly — a regex or naive
+    brace-counter cannot do this reliably.
+    """
+    decoder = json.JSONDecoder()
+    idx = 0
+    while True:
+        start = text.find("{", idx)
+        if start == -1:
+            return
+        try:
+            obj, end = decoder.raw_decode(text, start)
+        except json.JSONDecodeError:
+            idx = start + 1
+            continue
+        idx = end
+        yield obj
+
+
+def parse_tool_call(text: str) -> Optional[ToolCall]:
+    """Extract a single tool call from a model reply.
+
+    The model is asked to emit a ```tool fenced block, but real output often
+    drops the fence, mislabels it (``json`` or a bare fence), or puts the JSON
+    on the same line. We therefore first honor an explicit ```tool block, then
+    fall back to the first JSON object anywhere in the reply that validates as a
+    known tool call.
+
+    Returns ``None`` when no valid tool call is present (the reply is a final
+    answer) or when every candidate is malformed/unknown — callers treat
+    ``None`` as "this is plain text to show the user".
+    """
+    text = text or ""
+    match = _TOOL_BLOCK_RE.search(text)
+    if match:
+        try:
+            call = _payload_to_call(json.loads(match.group(1).strip()))
+        except json.JSONDecodeError:
+            call = None
+        if call is not None:
+            return call
+    for payload in _iter_json_objects(text):
+        call = _payload_to_call(payload)
+        if call is not None:
+            return call
+    return None
 
 
 def strip_tool_block(text: str) -> str:
