@@ -4,3 +4,7 @@
 .pytest_cache
 .DS_Store
 plan.md
+__pycache__/
+*.py[cod]
+*.egg-info/
+uv.lock
