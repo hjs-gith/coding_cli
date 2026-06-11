@@ -130,6 +130,14 @@ for confirmation before running (unless `--no-confirm`). At the `[y/N/d]` prompt
 for a write or edit, press `d` to preview the exact diff before deciding. All file
 access is sandboxed to the working directory (and re-rooted when you `/cd`).
 
+### Output styling
+
+With the `rich` extra installed, the three roles are visually distinct: your
+prompt is a cyan `you ›`, tool steps show compact `→`/`✓` lines, and the
+assistant's reply renders as Markdown (syntax-highlighted code, formatted lists)
+behind a green left gutter bar. Set `NO_COLOR=1`, or install without the `rich`
+extra, to get plain text with simple `▎` gutters and no escape codes.
+
 ### Reviewing and undoing changes
 
 Before each `write_file`/`edit_file`, coding-cli snapshots the file's prior state

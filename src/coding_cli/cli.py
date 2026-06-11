@@ -6,39 +6,10 @@ import argparse
 import sys
 from pathlib import Path
 
+from . import ui
 from .agent import Agent, build_agent
 from .config import Config, ConfigError
 from .history import ChangeHistory
-
-try:
-    from rich.console import Console
-
-    _console = Console()
-except ImportError:  # pragma: no cover - rich is optional
-    _console = None
-
-
-def _out(text: str, style: str | None = None) -> None:
-    if _console is not None and style:
-        _console.print(text, style=style)
-    else:
-        print(text)
-
-
-def _print_diff(diff: str) -> None:
-    """Render a unified diff with red/green line styling (plain if no rich)."""
-    if not diff:
-        _out("  (no diff available)", style="dim")
-        return
-    for line in diff.splitlines():
-        if line.startswith("+") and not line.startswith("+++"):
-            _out(line, style="green")
-        elif line.startswith("-") and not line.startswith("---"):
-            _out(line, style="red")
-        elif line.startswith("@@"):
-            _out(line, style="cyan")
-        else:
-            _out(line, style="dim")
 
 
 def _make_confirm(auto_yes: bool):
@@ -46,9 +17,9 @@ def _make_confirm(auto_yes: bool):
 
     def confirm(action: str, detail: str, preview: str = "") -> bool:
         if auto_yes:
-            _out(f"  [auto-approved] {action}: {detail}", style="dim")
+            ui.notice(f"  [auto-approved] {action}: {detail}")
             return True
-        _out(f"\n  ⚠  {action}: {detail}", style="yellow")
+        ui.warn(f"\n  ⚠  {action}: {detail}")
         prompt = "  Proceed? [y/N/d] " if preview else "  Proceed? [y/N] "
         while True:
             try:
@@ -57,7 +28,7 @@ def _make_confirm(auto_yes: bool):
                 print()
                 return False
             if reply == "d" and preview:
-                _print_diff(preview)
+                ui.diff(preview)
                 continue
             return reply in ("y", "yes")
 
@@ -67,9 +38,9 @@ def _make_confirm(auto_yes: bool):
 def _make_reporter():
     def report(event: str, detail: str) -> None:
         if event == "tool":
-            _out(f"  → {detail}", style="cyan")
+            ui.tool(detail)
         elif event == "tool_result":
-            _out(f"  ✓ {detail}", style="dim")
+            ui.tool_result(detail)
 
     return report
 
@@ -78,21 +49,21 @@ def _run_once(agent: Agent, prompt: str) -> int:
     try:
         answer = agent.run_turn(prompt)
     except Exception as exc:  # surface backend/tool errors cleanly
-        _out(f"Error: {exc}", style="red")
+        ui.error(f"Error: {exc}")
         return 1
-    _out(answer)
+    ui.assistant(answer)
     return 0
 
 
 def _repl(agent: Agent) -> int:
-    _out("coding-cli — type a request, or /help. Ctrl-D to exit.", style="bold")
-    _out(f"working in: {agent.workdir}", style="dim")
+    ui.out("coding-cli — type a request, or /help. Ctrl-D to exit.", style="bold")
+    ui.notice(f"working in: {agent.workdir}")
     if agent.skills:
         names = ", ".join(sorted(agent.skills))
-        _out(f"Skills available: {names}", style="dim")
+        ui.notice(f"Skills available: {names}")
     while True:
         try:
-            line = input("\n› ").strip()
+            line = ui.prompt().strip()
         except EOFError:
             print()
             return 0
@@ -108,13 +79,12 @@ def _repl(agent: Agent) -> int:
         try:
             answer = agent.run_turn(line)
         except KeyboardInterrupt:
-            _out("\n(interrupted)", style="yellow")
+            ui.warn("\n(interrupted)")
             continue
         except Exception as exc:
-            _out(f"Error: {exc}", style="red")
+            ui.error(f"Error: {exc}")
             continue
-        _out("")
-        _out(answer)
+        ui.assistant(answer)
 
 
 def _handle_command(agent: Agent, line: str) -> bool:
@@ -124,27 +94,27 @@ def _handle_command(agent: Agent, line: str) -> bool:
         return True
     if cmd == "/reset":
         agent.reset()
-        _out("Started a new conversation.", style="dim")
+        ui.notice("Started a new conversation.")
     elif cmd == "/cd":
         parts = line.split(maxsplit=1)
         if len(parts) == 1:
-            _out(str(agent.workdir), style="dim")
+            ui.notice(str(agent.workdir))
         else:
-            _out(agent.set_workdir(parts[1].strip()), style="dim")
+            ui.notice(agent.set_workdir(parts[1].strip()))
     elif cmd == "/skills":
         if agent.skills:
             for name, skill in sorted(agent.skills.items()):
-                _out(f"  {name} — {skill.description}")
+                ui.out(f"  {name} — {skill.description}")
         else:
-            _out("  (no skills discovered)")
+            ui.notice("  (no skills discovered)")
     elif cmd == "/diff":
-        _print_diff(agent.session_diff())
+        ui.diff(agent.session_diff())
     elif cmd == "/undo":
-        _out(agent.undo(), style="dim")
+        ui.notice(agent.undo())
     elif cmd == "/help":
-        _out("Commands: /reset  /cd  /diff  /undo  /skills  /help  /exit")
+        ui.out("Commands: /reset  /cd  /diff  /undo  /skills  /help  /exit")
     else:
-        _out(f"Unknown command: {cmd}. Try /help.", style="yellow")
+        ui.warn(f"Unknown command: {cmd}. Try /help.")
     return False
 
 
@@ -185,13 +155,13 @@ def main(argv: list[str] | None = None) -> int:
     # --undo reverts a previously recorded change without contacting Dify, so
     # handle it before loading config (it needs no API key).
     if args.undo:
-        _out(ChangeHistory(workdir).undo(), style="dim")
+        ui.notice(ChangeHistory(workdir).undo())
         return 0
 
     try:
         config = Config.load(workdir=workdir)
     except ConfigError as exc:
-        _out(f"Configuration error: {exc}", style="red")
+        ui.error(f"Configuration error: {exc}")
         return 2
 
     agent = build_agent(
