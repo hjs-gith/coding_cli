@@ -86,6 +86,7 @@ def _run_once(agent: Agent, prompt: str) -> int:
 
 def _repl(agent: Agent) -> int:
     _out("coding-cli — type a request, or /help. Ctrl-D to exit.", style="bold")
+    _out(f"working in: {agent.workdir}", style="dim")
     if agent.skills:
         names = ", ".join(sorted(agent.skills))
         _out(f"Skills available: {names}", style="dim")
@@ -124,6 +125,12 @@ def _handle_command(agent: Agent, line: str) -> bool:
     if cmd == "/reset":
         agent.reset()
         _out("Started a new conversation.", style="dim")
+    elif cmd == "/cd":
+        parts = line.split(maxsplit=1)
+        if len(parts) == 1:
+            _out(str(agent.workdir), style="dim")
+        else:
+            _out(agent.set_workdir(parts[1].strip()), style="dim")
     elif cmd == "/skills":
         if agent.skills:
             for name, skill in sorted(agent.skills.items()):
@@ -135,7 +142,7 @@ def _handle_command(agent: Agent, line: str) -> bool:
     elif cmd == "/undo":
         _out(agent.undo(), style="dim")
     elif cmd == "/help":
-        _out("Commands: /reset  /diff  /undo  /skills  /help  /exit")
+        _out("Commands: /reset  /cd  /diff  /undo  /skills  /help  /exit")
     else:
         _out(f"Unknown command: {cmd}. Try /help.", style="yellow")
     return False

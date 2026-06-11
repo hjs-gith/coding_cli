@@ -122,12 +122,13 @@ coding-cli --no-stream           # blocking instead of streaming responses
 coding-cli --undo                # revert the last recorded file change, then exit
 ```
 
-In the REPL: `/reset` (new conversation), `/diff` (review this session's file
+In the REPL: `/reset` (new conversation), `/cd <path>` (change the working
+directory, or no argument to print it), `/diff` (review this session's file
 changes), `/undo` (revert the most recent change, repeatable), `/skills` (list
 skills), `/help`, `/exit` (or Ctrl-D). File writes, edits, and shell commands ask
 for confirmation before running (unless `--no-confirm`). At the `[y/N/d]` prompt
 for a write or edit, press `d` to preview the exact diff before deciding. All file
-access is sandboxed to the working directory.
+access is sandboxed to the working directory (and re-rooted when you `/cd`).
 
 ### Reviewing and undoing changes
 
