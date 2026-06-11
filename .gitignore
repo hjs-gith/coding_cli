@@ -8,3 +8,6 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 uv.lock
+
+# Snapshot/undo history created when running coding-cli
+.coding_cli/
