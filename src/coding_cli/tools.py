@@ -43,6 +43,19 @@ class ToolContext:
     load_skill: Optional[Callable[[str], str]] = None
     # Records prior file state so changes can be reviewed and undone.
     history: Optional["ChangeHistory"] = None
+    # Workdir-relative paths the file tools refuse to touch (the ``.coding_cli``
+    # snapshot dir is always reserved on top of these).
+    deny: tuple[str, ...] = ()
+
+
+def _reserved_paths(ctx: ToolContext) -> "list[tuple[Path, str]]":
+    """Resolved (path, label) pairs the file tools must not touch: the always
+    reserved ``.coding_cli`` snapshot dir plus any configured denylist entries."""
+    workdir = ctx.workdir.resolve()
+    reserved = [(workdir / HISTORY_DIR, HISTORY_DIR)]
+    for entry in ctx.deny or ():
+        reserved.append(((workdir / entry).resolve(), entry))
+    return reserved
 
 
 def _resolve(ctx: ToolContext, path: str) -> Path:
@@ -55,12 +68,12 @@ def _resolve(ctx: ToolContext, path: str) -> Path:
         raise ToolError(
             f"Refusing to access '{path}': outside the working directory {workdir}."
         )
-    reserved = workdir / HISTORY_DIR
-    if target == reserved or reserved in target.parents:
-        raise ToolError(
-            f"Refusing to access '{path}': {HISTORY_DIR}/ is reserved for "
-            "coding-cli's snapshot history and is off-limits to tools."
-        )
+    for reserved, label in _reserved_paths(ctx):
+        if target == reserved or reserved in target.parents:
+            raise ToolError(
+                f"Refusing to access '{path}': '{label}' is a protected path, "
+                "off-limits to tools."
+            )
     return target
 
 
@@ -108,11 +121,11 @@ def list_dir(ctx: ToolContext, path: str = ".") -> str:
     target = _resolve(ctx, path)
     if not target.is_dir():
         raise ToolError(f"Not a directory: {path}")
-    reserved = ctx.workdir.resolve() / HISTORY_DIR
+    reserved = {p for p, _ in _reserved_paths(ctx)}
     entries = []
     for child in sorted(target.iterdir()):
-        if child.resolve() == reserved:
-            continue  # hide coding-cli's reserved snapshot directory
+        if child.resolve() in reserved:
+            continue  # hide reserved/protected paths from the model
         suffix = "/" if child.is_dir() else ""
         entries.append(child.name + suffix)
     return "\n".join(entries) if entries else "(empty directory)"

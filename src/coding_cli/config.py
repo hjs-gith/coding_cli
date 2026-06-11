@@ -20,6 +20,9 @@ except ImportError:  # pragma: no cover - dotenv is a declared dependency
 DEFAULT_BASE_URL = "https://api.dify.ai/v1"
 DEFAULT_USER_ID = "coding-cli"
 DEFAULT_MAX_TOOL_ITERS = 12
+# Workdir-relative paths the agent's file tools may not read or write, in
+# addition to the always-reserved ``.coding_cli`` snapshot directory.
+DEFAULT_DENY = (".env", ".git")
 
 
 class ConfigError(RuntimeError):
@@ -35,6 +38,7 @@ class Config:
     user_id: str = DEFAULT_USER_ID
     max_tool_iters: int = DEFAULT_MAX_TOOL_ITERS
     workdir: Path = field(default_factory=Path.cwd)
+    deny: tuple[str, ...] = DEFAULT_DENY
 
     @classmethod
     def load(cls, workdir: Path | None = None) -> "Config":
@@ -67,12 +71,25 @@ class Config:
         except ValueError:
             max_tool_iters = DEFAULT_MAX_TOOL_ITERS
 
+        # CODING_CLI_DENY overrides the default protected paths (comma-separated).
+        # Setting it to an empty value disables the extra defaults; ``.coding_cli``
+        # is always reserved regardless.
+        if "CODING_CLI_DENY" in os.environ:
+            deny = tuple(
+                d.strip()
+                for d in _clean(os.environ["CODING_CLI_DENY"]).split(",")
+                if d.strip()
+            )
+        else:
+            deny = DEFAULT_DENY
+
         return cls(
             api_key=api_key,
             base_url=base_url,
             user_id=user_id,
             max_tool_iters=max_tool_iters,
             workdir=work,
+            deny=deny,
         )
 
 

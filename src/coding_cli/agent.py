@@ -29,6 +29,7 @@ class Agent:
     confirm: Optional[tools.ConfirmFn] = None
     report: Optional[ReporterFn] = None
     stream: bool = True
+    deny: tuple[str, ...] = ()
     _preamble_sent: bool = False
 
     def reset(self) -> None:
@@ -73,6 +74,7 @@ class Agent:
             confirm=self.confirm,
             load_skill=skills_mod.make_loader(self.skills),
             history=self.history,
+            deny=self.deny,
         )
 
     def _preamble(self) -> str:
@@ -153,4 +155,5 @@ def build_agent(
         confirm=confirm,
         report=report,
         stream=stream,
+        deny=config.deny,
     )

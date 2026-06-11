@@ -48,6 +48,7 @@ DIFY_API_KEY=app-xxxxxxxxxxxxxxxx
 # optional:
 DIFY_BASE_URL=https://api.dify.ai/v1   # change for self-hosted Dify
 DIFY_USER_ID=coding-cli                # stable per-user id sent to Dify
+CODING_CLI_DENY=.env,.git              # paths the file tools may not touch
 ```
 
 The `DIFY_API_KEY` must belong to a Dify **Chat** (or Chatflow) app.
@@ -146,10 +147,20 @@ shows up in `git status`). This powers `/diff`, `/undo`, and `--undo` without
 depending on your project's git, and the journal persists so you can `--undo` a
 change even in a later session.
 
-The `.coding_cli/` directory is reserved: the agent's filesystem tools cannot read
-or write anything inside it and it is hidden from `list_dir`, so the model can't
-corrupt the snapshot history. Deleting it yourself is safe — it self-heals on the
-next change and only discards undo/diff history, never your files.
+### Protected paths
+
+The agent's file tools (`read_file`, `list_dir`, `write_file`, `edit_file`) refuse
+to touch a denylist of workdir-relative paths, and those paths are hidden from
+`list_dir`. The `.coding_cli/` snapshot directory is **always** reserved (so the
+model can't corrupt your undo history); on top of that, `CODING_CLI_DENY`
+configures additional protected paths and defaults to `.env,.git`. Set it to a
+comma-separated list to change them, or to an empty value to keep only the
+always-reserved `.coding_cli`. Deleting `.coding_cli/` yourself is safe — it
+self-heals on the next change and only discards undo/diff history, never your files.
+
+Note: this guards the **file tools** only. `run_shell` runs arbitrary commands and
+is not path-sandboxed — it's gated by the per-command confirmation prompt instead,
+so review shell commands (e.g. anything that reads `.env`) before approving them.
 
 ### Example: one-shot commands
 
