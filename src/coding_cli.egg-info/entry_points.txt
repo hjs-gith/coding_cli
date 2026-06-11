@@ -1,2 +1,0 @@
-[console_scripts]
-coding-cli = coding_cli.cli:main

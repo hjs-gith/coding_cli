@@ -8,6 +8,7 @@ from typing import Callable, Dict, Optional
 
 from . import protocol, skills as skills_mod, tools
 from .dify_client import DifyClient
+from .history import ChangeHistory
 from .skills import Skill
 
 
@@ -23,6 +24,7 @@ class Agent:
     client: DifyClient
     workdir: Path
     skills: Dict[str, Skill]
+    history: ChangeHistory
     max_tool_iters: int = 12
     confirm: Optional[tools.ConfirmFn] = None
     report: Optional[ReporterFn] = None
@@ -30,15 +32,28 @@ class Agent:
     _preamble_sent: bool = False
 
     def reset(self) -> None:
-        """Begin a fresh conversation (new Dify thread + re-send preamble)."""
+        """Begin a fresh conversation (new Dify thread + re-send preamble).
+
+        File-change history is intentionally left intact so a conversation reset
+        never costs the ability to review or undo edits already made on disk.
+        """
         self.client.reset()
         self._preamble_sent = False
+
+    def undo(self) -> str:
+        """Revert the most recent file change made this session."""
+        return self.history.undo()
+
+    def session_diff(self) -> str:
+        """Unified diff of every file changed this session."""
+        return self.history.session_diff()
 
     def _tool_context(self) -> tools.ToolContext:
         return tools.ToolContext(
             workdir=self.workdir,
             confirm=self.confirm,
             load_skill=skills_mod.make_loader(self.skills),
+            history=self.history,
         )
 
     def _preamble(self) -> str:
@@ -114,6 +129,7 @@ def build_agent(
         client=client,
         workdir=config.workdir,
         skills=discovered,
+        history=ChangeHistory(config.workdir),
         max_tool_iters=config.max_tool_iters,
         confirm=confirm,
         report=report,

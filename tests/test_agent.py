@@ -1,5 +1,6 @@
 from coding_cli.agent import Agent
 from coding_cli.dify_client import ChatResult
+from coding_cli.history import ChangeHistory
 
 
 class FakeClient:
@@ -28,7 +29,8 @@ def make_agent(tmp_path, responses, **kw):
         client=FakeClient(responses),
         workdir=tmp_path,
         skills=kw.pop("skills", {}),
-        confirm=kw.pop("confirm", lambda a, d: True),
+        history=kw.pop("history", ChangeHistory(tmp_path)),
+        confirm=kw.pop("confirm", lambda a, d, preview="": True),
         **kw,
     )
 
