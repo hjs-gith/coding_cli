@@ -146,6 +146,11 @@ shows up in `git status`). This powers `/diff`, `/undo`, and `--undo` without
 depending on your project's git, and the journal persists so you can `--undo` a
 change even in a later session.
 
+The `.coding_cli/` directory is reserved: the agent's filesystem tools cannot read
+or write anything inside it and it is hidden from `list_dir`, so the model can't
+corrupt the snapshot history. Deleting it yourself is safe — it self-heals on the
+next change and only discards undo/diff history, never your files.
+
 ### Example: one-shot commands
 
 ```bash

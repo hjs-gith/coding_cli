@@ -53,6 +53,32 @@ def test_path_escape_rejected(tmp_path):
     assert "outside" in out
 
 
+def test_coding_cli_dir_is_off_limits(tmp_path):
+    (tmp_path / ".coding_cli" / "snapshots").mkdir(parents=True)
+    (tmp_path / ".coding_cli" / "journal.json").write_text("{}")
+    c = ctx(tmp_path)
+    # Every tool that resolves a path refuses anything under .coding_cli.
+    for call in (
+        ("read_file", {"path": ".coding_cli/journal.json"}),
+        ("list_dir", {"path": ".coding_cli"}),
+        ("write_file", {"path": ".coding_cli/journal.json", "content": "x"}),
+        ("write_file", {"path": ".coding_cli/snapshots/0001.bak", "content": "x"}),
+    ):
+        out = tools.execute(c, *call)
+        assert out.startswith("ERROR"), call
+        assert "reserved" in out, call
+    # The journal was not modified.
+    assert (tmp_path / ".coding_cli" / "journal.json").read_text() == "{}"
+
+
+def test_coding_cli_dir_hidden_from_listing(tmp_path):
+    (tmp_path / ".coding_cli" / "snapshots").mkdir(parents=True)
+    (tmp_path / "real.txt").write_text("hi")
+    out = tools.execute(ctx(tmp_path), "list_dir", {"path": "."})
+    assert "real.txt" in out
+    assert ".coding_cli" not in out
+
+
 def test_run_shell(tmp_path):
     out = tools.execute(ctx(tmp_path), "run_shell", {"command": "echo hi"})
     assert "exit code: 0" in out

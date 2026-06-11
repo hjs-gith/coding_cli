@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
 
+from .history import DIR_NAME as HISTORY_DIR
+
 if TYPE_CHECKING:
     from .history import ChangeHistory
 
@@ -44,7 +46,7 @@ class ToolContext:
 
 
 def _resolve(ctx: ToolContext, path: str) -> Path:
-    """Resolve ``path`` under the workdir, rejecting escapes outside it."""
+    """Resolve ``path`` under the workdir, rejecting escapes and reserved paths."""
     workdir = ctx.workdir.resolve()
     target = (workdir / path).resolve() if not Path(path).is_absolute() else Path(path).resolve()
     try:
@@ -52,6 +54,12 @@ def _resolve(ctx: ToolContext, path: str) -> Path:
     except ValueError:
         raise ToolError(
             f"Refusing to access '{path}': outside the working directory {workdir}."
+        )
+    reserved = workdir / HISTORY_DIR
+    if target == reserved or reserved in target.parents:
+        raise ToolError(
+            f"Refusing to access '{path}': {HISTORY_DIR}/ is reserved for "
+            "coding-cli's snapshot history and is off-limits to tools."
         )
     return target
 
@@ -100,8 +108,11 @@ def list_dir(ctx: ToolContext, path: str = ".") -> str:
     target = _resolve(ctx, path)
     if not target.is_dir():
         raise ToolError(f"Not a directory: {path}")
+    reserved = ctx.workdir.resolve() / HISTORY_DIR
     entries = []
     for child in sorted(target.iterdir()):
+        if child.resolve() == reserved:
+            continue  # hide coding-cli's reserved snapshot directory
         suffix = "/" if child.is_dir() else ""
         entries.append(child.name + suffix)
     return "\n".join(entries) if entries else "(empty directory)"
