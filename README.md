@@ -119,11 +119,23 @@ coding-cli --once "list files"   # one-shot, then exit
 coding-cli --workdir ./project   # operate in a specific directory
 coding-cli --no-confirm          # auto-approve writes/shell (use with care)
 coding-cli --no-stream           # blocking instead of streaming responses
+coding-cli --undo                # revert the last recorded file change, then exit
 ```
 
-In the REPL: `/reset` (new conversation), `/skills` (list skills), `/help`, `/exit`
-(or Ctrl-D). File writes, edits, and shell commands ask for confirmation before
-running (unless `--no-confirm`). All file access is sandboxed to the working directory.
+In the REPL: `/reset` (new conversation), `/diff` (review this session's file
+changes), `/undo` (revert the most recent change, repeatable), `/skills` (list
+skills), `/help`, `/exit` (or Ctrl-D). File writes, edits, and shell commands ask
+for confirmation before running (unless `--no-confirm`). At the `[y/N/d]` prompt
+for a write or edit, press `d` to preview the exact diff before deciding. All file
+access is sandboxed to the working directory.
+
+### Reviewing and undoing changes
+
+Before each `write_file`/`edit_file`, coding-cli snapshots the file's prior state
+under a `.coding_cli/` directory in your workdir (which ignores itself, so it never
+shows up in `git status`). This powers `/diff`, `/undo`, and `--undo` without
+depending on your project's git, and the journal persists so you can `--undo` a
+change even in a later session.
 
 ### Example: one-shot commands
 

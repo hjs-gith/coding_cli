@@ -7,16 +7,22 @@ callback so the CLI can ask the user before anything touches disk.
 
 from __future__ import annotations
 
+import difflib
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional
+
+if TYPE_CHECKING:
+    from .history import ChangeHistory
 
 MAX_OUTPUT_CHARS = 20_000
 SHELL_TIMEOUT_SECONDS = 120
+MAX_DIFF_LINES = 120
 
-# A confirmation callback: (action, detail) -> bool. Returning False aborts.
-ConfirmFn = Callable[[str, str], bool]
+# A confirmation callback: (action, detail, preview) -> bool. ``preview`` is an
+# optional unified diff the UI can show on demand. Returning False aborts.
+ConfirmFn = Callable[[str, str, str], bool]
 
 MUTATING_TOOLS = {"write_file", "edit_file", "run_shell"}
 
@@ -33,6 +39,8 @@ class ToolContext:
     confirm: Optional[ConfirmFn] = None
     # use_skill needs access to the skill registry; injected by the agent.
     load_skill: Optional[Callable[[str], str]] = None
+    # Records prior file state so changes can be reviewed and undone.
+    history: Optional["ChangeHistory"] = None
 
 
 def _resolve(ctx: ToolContext, path: str) -> Path:
@@ -54,9 +62,26 @@ def _truncate(text: str) -> str:
     return text[:MAX_OUTPUT_CHARS] + f"\n... [truncated {len(text) - MAX_OUTPUT_CHARS} chars]"
 
 
-def _confirm(ctx: ToolContext, action: str, detail: str) -> None:
-    if ctx.confirm is not None and not ctx.confirm(action, detail):
+def _confirm(ctx: ToolContext, action: str, detail: str, preview: str = "") -> None:
+    if ctx.confirm is not None and not ctx.confirm(action, detail, preview):
         raise ToolError(f"User declined: {action}")
+
+
+def _make_diff(path: str, before: str, after: str) -> str:
+    """Build a truncated unified diff of a pending file change."""
+    diff = list(
+        difflib.unified_diff(
+            before.splitlines(),
+            after.splitlines(),
+            fromfile=f"a/{path}",
+            tofile=f"b/{path}",
+            lineterm="",
+        )
+    )
+    if len(diff) > MAX_DIFF_LINES:
+        omitted = len(diff) - MAX_DIFF_LINES
+        diff = diff[:MAX_DIFF_LINES] + [f"... [truncated {omitted} diff lines]"]
+    return "\n".join(diff)
 
 
 # --- individual tools -------------------------------------------------------
@@ -85,8 +110,12 @@ def list_dir(ctx: ToolContext, path: str = ".") -> str:
 def write_file(ctx: ToolContext, path: str, content: str) -> str:
     target = _resolve(ctx, path)
     exists = target.is_file()
+    before = target.read_text(encoding="utf-8", errors="replace") if exists else ""
     verb = "Overwrite" if exists else "Create"
-    _confirm(ctx, "write_file", f"{verb} {path} ({len(content)} chars)")
+    preview = _make_diff(path, before, content)
+    _confirm(ctx, "write_file", f"{verb} {path} ({len(content)} chars)", preview)
+    if ctx.history is not None:
+        ctx.history.record(path, before, exists, "write_file")
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
@@ -108,8 +137,11 @@ def edit_file(ctx: ToolContext, path: str, old: str, new: str) -> str:
             f"`old` string is not unique in {path} (found {count} times). "
             "Include more surrounding context."
         )
-    _confirm(ctx, "edit_file", f"Edit {path}: replace 1 occurrence")
     updated = text.replace(old, new, 1)
+    preview = _make_diff(path, text, updated)
+    _confirm(ctx, "edit_file", f"Edit {path}: replace 1 occurrence", preview)
+    if ctx.history is not None:
+        ctx.history.record(path, text, True, "edit_file")
     try:
         target.write_text(updated, encoding="utf-8")
     except OSError as exc:

@@ -60,10 +60,24 @@ def test_run_shell(tmp_path):
 
 
 def test_confirm_declined_blocks_write(tmp_path):
-    c = ctx(tmp_path, confirm=lambda action, detail: False)
+    c = ctx(tmp_path, confirm=lambda action, detail, preview="": False)
     out = tools.execute(c, "write_file", {"path": "a.txt", "content": "x"})
     assert out.startswith("ERROR")
     assert not (tmp_path / "a.txt").exists()
+
+
+def test_confirm_receives_diff_preview(tmp_path):
+    (tmp_path / "a.txt").write_text("old line\n")
+    seen = {}
+
+    def confirm(action, detail, preview=""):
+        seen["preview"] = preview
+        return True
+
+    c = ctx(tmp_path, confirm=confirm)
+    tools.execute(c, "edit_file", {"path": "a.txt", "old": "old", "new": "new"})
+    assert "-old line" in seen["preview"]
+    assert "+new line" in seen["preview"]
 
 
 def test_bad_arguments(tmp_path):

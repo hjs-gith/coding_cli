@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .agent import Agent, build_agent
 from .config import Config, ConfigError
+from .history import ChangeHistory
 
 try:
     from rich.console import Console
@@ -24,20 +25,41 @@ def _out(text: str, style: str | None = None) -> None:
         print(text)
 
 
+def _print_diff(diff: str) -> None:
+    """Render a unified diff with red/green line styling (plain if no rich)."""
+    if not diff:
+        _out("  (no diff available)", style="dim")
+        return
+    for line in diff.splitlines():
+        if line.startswith("+") and not line.startswith("+++"):
+            _out(line, style="green")
+        elif line.startswith("-") and not line.startswith("---"):
+            _out(line, style="red")
+        elif line.startswith("@@"):
+            _out(line, style="cyan")
+        else:
+            _out(line, style="dim")
+
+
 def _make_confirm(auto_yes: bool):
     """Build the confirmation callback for mutating tools."""
 
-    def confirm(action: str, detail: str) -> bool:
+    def confirm(action: str, detail: str, preview: str = "") -> bool:
         if auto_yes:
             _out(f"  [auto-approved] {action}: {detail}", style="dim")
             return True
         _out(f"\n  ⚠  {action}: {detail}", style="yellow")
-        try:
-            reply = input("  Proceed? [y/N] ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            return False
-        return reply in ("y", "yes")
+        prompt = "  Proceed? [y/N/d] " if preview else "  Proceed? [y/N] "
+        while True:
+            try:
+                reply = input(prompt).strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                return False
+            if reply == "d" and preview:
+                _print_diff(preview)
+                continue
+            return reply in ("y", "yes")
 
     return confirm
 
@@ -108,8 +130,12 @@ def _handle_command(agent: Agent, line: str) -> bool:
                 _out(f"  {name} — {skill.description}")
         else:
             _out("  (no skills discovered)")
+    elif cmd == "/diff":
+        _print_diff(agent.session_diff())
+    elif cmd == "/undo":
+        _out(agent.undo(), style="dim")
     elif cmd == "/help":
-        _out("Commands: /reset  /skills  /help  /exit")
+        _out("Commands: /reset  /diff  /undo  /skills  /help  /exit")
     else:
         _out(f"Unknown command: {cmd}. Try /help.", style="yellow")
     return False
@@ -140,9 +166,21 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Use blocking responses instead of streaming.",
     )
+    parser.add_argument(
+        "--undo",
+        action="store_true",
+        help="Undo the most recent recorded file change and exit.",
+    )
     args = parser.parse_args(argv)
 
     workdir = Path(args.workdir).resolve() if args.workdir else Path.cwd()
+
+    # --undo reverts a previously recorded change without contacting Dify, so
+    # handle it before loading config (it needs no API key).
+    if args.undo:
+        _out(ChangeHistory(workdir).undo(), style="dim")
+        return 0
+
     try:
         config = Config.load(workdir=workdir)
     except ConfigError as exc:
