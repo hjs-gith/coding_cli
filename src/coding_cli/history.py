@@ -65,6 +65,7 @@ class ChangeHistory:
         self._seq = data.get("seq", len(self._changes))
 
     def _save(self) -> None:
+        self._ensure_dir()  # recreate the dir if it was deleted mid-session
         payload = {
             "seq": self._seq,
             "changes": [asdict(c) for c in self._changes],
@@ -122,20 +123,33 @@ class ChangeHistory:
                 pass
             result = f"Undid {change.action}: removed {change.path}"
         else:
-            content = ""
-            if change.backup:
-                content = (self.snap_dir / change.backup).read_text(
-                    encoding="utf-8"
+            try:
+                content = ""
+                if change.backup:
+                    content = (self.snap_dir / change.backup).read_text(
+                        encoding="utf-8"
+                    )
+            except OSError:
+                # The snapshot is gone (e.g. .coding_cli was deleted). The change
+                # is unrecoverable, so consume it and report instead of crashing.
+                self._drop_baseline_if_unused(change.path)
+                self._save()
+                return (
+                    f"Cannot undo {change.action} for {change.path}: its snapshot "
+                    "is missing (was .coding_cli removed?)."
                 )
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content, encoding="utf-8")
             result = f"Undid {change.action}: restored {change.path}"
-        # Drop the baseline once no remaining change references the path, so a
-        # later session_diff doesn't report a file we've fully reverted.
-        if all(c.path != change.path for c in self._changes):
-            self._baselines.pop(change.path, None)
+        self._drop_baseline_if_unused(change.path)
         self._save()
         return result
+
+    def _drop_baseline_if_unused(self, path: str) -> None:
+        """Forget a path's baseline once no remaining change references it, so a
+        later session_diff doesn't report a file we've fully reverted."""
+        if all(c.path != path for c in self._changes):
+            self._baselines.pop(path, None)
 
     def session_diff(self) -> str:
         """Unified diff of every touched file: baseline -> current on disk."""

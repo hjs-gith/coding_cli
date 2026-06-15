@@ -53,6 +53,68 @@ def test_path_escape_rejected(tmp_path):
     assert "outside" in out
 
 
+def test_coding_cli_dir_is_off_limits(tmp_path):
+    (tmp_path / ".coding_cli" / "snapshots").mkdir(parents=True)
+    (tmp_path / ".coding_cli" / "journal.json").write_text("{}")
+    c = ctx(tmp_path)
+    # Every tool that resolves a path refuses anything under .coding_cli, even
+    # without any configured denylist (it is always reserved).
+    for call in (
+        ("read_file", {"path": ".coding_cli/journal.json"}),
+        ("list_dir", {"path": ".coding_cli"}),
+        ("write_file", {"path": ".coding_cli/journal.json", "content": "x"}),
+        ("write_file", {"path": ".coding_cli/snapshots/0001.bak", "content": "x"}),
+    ):
+        out = tools.execute(c, *call)
+        assert out.startswith("ERROR"), call
+        assert "off-limits" in out, call
+    # The journal was not modified.
+    assert (tmp_path / ".coding_cli" / "journal.json").read_text() == "{}"
+
+
+def test_coding_cli_dir_hidden_from_listing(tmp_path):
+    (tmp_path / ".coding_cli" / "snapshots").mkdir(parents=True)
+    (tmp_path / "real.txt").write_text("hi")
+    out = tools.execute(ctx(tmp_path), "list_dir", {"path": "."})
+    assert "real.txt" in out
+    assert ".coding_cli" not in out
+
+
+def deny_ctx(tmp_path, deny):
+    return ToolContext(workdir=tmp_path, deny=tuple(deny))
+
+
+def test_denylist_blocks_configured_paths(tmp_path):
+    (tmp_path / ".env").write_text("DIFY_API_KEY=secret")
+    (tmp_path / ".git").mkdir()
+    (tmp_path / ".git" / "config").write_text("[core]")
+    c = deny_ctx(tmp_path, [".env", ".git"])
+    for call in (
+        ("read_file", {"path": ".env"}),
+        ("edit_file", {"path": ".env", "old": "secret", "new": "x"}),
+        ("read_file", {"path": ".git/config"}),
+        ("write_file", {"path": ".git/hooks/pre-commit", "content": "x"}),
+    ):
+        out = tools.execute(c, *call)
+        assert out.startswith("ERROR"), call
+        assert "protected" in out, call
+    assert (tmp_path / ".env").read_text() == "DIFY_API_KEY=secret"
+
+
+def test_denylist_hides_entries_from_listing(tmp_path):
+    (tmp_path / ".env").write_text("x")
+    (tmp_path / "keep.txt").write_text("y")
+    out = tools.execute(deny_ctx(tmp_path, [".env"]), "list_dir", {"path": "."})
+    assert "keep.txt" in out
+    assert ".env" not in out
+
+
+def test_denylist_does_not_block_unlisted_paths(tmp_path):
+    (tmp_path / "notes.txt").write_text("hello")
+    out = tools.execute(deny_ctx(tmp_path, [".env"]), "read_file", {"path": "notes.txt"})
+    assert out == "hello"
+
+
 def test_run_shell(tmp_path):
     out = tools.execute(ctx(tmp_path), "run_shell", {"command": "echo hi"})
     assert "exit code: 0" in out

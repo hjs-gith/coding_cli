@@ -29,6 +29,7 @@ class Agent:
     confirm: Optional[tools.ConfirmFn] = None
     report: Optional[ReporterFn] = None
     stream: bool = True
+    deny: tuple[str, ...] = ()
     _preamble_sent: bool = False
 
     def reset(self) -> None:
@@ -44,6 +45,25 @@ class Agent:
         """Revert the most recent file change made this session."""
         return self.history.undo()
 
+    def set_workdir(self, path: str) -> str:
+        """Change the working directory mid-session.
+
+        Re-roots the filesystem sandbox and re-binds the directory-scoped state
+        (snapshot history and project-local skills). The Dify conversation and
+        credentials are left untouched. Relative paths resolve against the
+        current workdir; ``~`` is expanded. Returns a status message.
+        """
+        candidate = Path(path).expanduser()
+        if not candidate.is_absolute():
+            candidate = self.workdir / candidate
+        candidate = candidate.resolve()
+        if not candidate.is_dir():
+            return f"Not a directory: {path}"
+        self.workdir = candidate
+        self.history = ChangeHistory(candidate)
+        self.skills = skills_mod.discover_skills(candidate)
+        return f"Working directory: {candidate}"
+
     def session_diff(self) -> str:
         """Unified diff of every file changed this session."""
         return self.history.session_diff()
@@ -54,6 +74,7 @@ class Agent:
             confirm=self.confirm,
             load_skill=skills_mod.make_loader(self.skills),
             history=self.history,
+            deny=self.deny,
         )
 
     def _preamble(self) -> str:
@@ -134,4 +155,5 @@ def build_agent(
         confirm=confirm,
         report=report,
         stream=stream,
+        deny=config.deny,
     )

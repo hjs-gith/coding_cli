@@ -70,6 +70,75 @@ def test_max_iters_guard(tmp_path):
     assert "maximum of 3 tool steps" in answer
 
 
+def test_set_workdir_changes_where_writes_land(tmp_path):
+    old = tmp_path / "old"
+    new = tmp_path / "new"
+    old.mkdir()
+    new.mkdir()
+    agent = make_agent(old, [
+        '```tool\n{"tool": "write_file", "args": {"path": "f.txt", "content": "hi"}}\n```',
+        "done",
+    ])
+    msg = agent.set_workdir(str(new))
+    assert agent.workdir == new.resolve()
+    assert str(new.resolve()) in msg
+    agent.run_turn("make a file")
+    assert (new / "f.txt").read_text() == "hi"
+    assert not (old / "f.txt").exists()
+
+
+def test_set_workdir_rediscovers_skills(tmp_path):
+    proj = tmp_path / "proj"
+    skill_dir = proj / "skills" / "greeter"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: greeter\ndescription: say hi\n---\nWave at the user.\n"
+    )
+    agent = make_agent(tmp_path, ["unused"])
+    assert "greeter" not in agent.skills
+    agent.set_workdir(str(proj))
+    assert "greeter" in agent.skills
+
+
+def test_set_workdir_invalid_path_unchanged(tmp_path):
+    agent = make_agent(tmp_path, ["unused"])
+    before = agent.workdir
+    msg = agent.set_workdir(str(tmp_path / "does-not-exist"))
+    assert msg.startswith("Not a directory:")
+    assert agent.workdir == before
+
+
+def test_set_workdir_relative_resolves_against_current(tmp_path):
+    (tmp_path / "sub").mkdir()
+    agent = make_agent(tmp_path, ["unused"])
+    agent.set_workdir("sub")
+    assert agent.workdir == (tmp_path / "sub").resolve()
+
+
+def test_sandbox_holds_after_cd(tmp_path):
+    # A secret in the parent dir; after cd into the child, it is out of sandbox.
+    (tmp_path / "secret.txt").write_text("TOP SECRET")
+    child = tmp_path / "child"
+    child.mkdir()
+    agent = make_agent(tmp_path, [
+        '```tool\n{"tool": "read_file", "args": {"path": "../secret.txt"}}\n```',
+        '```tool\n{"tool": "read_file", "args": {"path": "SECRET_ABS"}}\n```'.replace(
+            "SECRET_ABS", str(tmp_path / "secret.txt")
+        ),
+        "final",
+    ])
+    agent.set_workdir(str(child))
+    agent.run_turn("try to read the secret")
+    # Both the relative escape and the absolute out-of-sandbox path are blocked,
+    # and the secret never leaks back into the queries sent to the model.
+    relative_result = agent.client.queries[1]
+    absolute_result = agent.client.queries[2]
+    assert "outside the working directory" in relative_result
+    assert "outside the working directory" in absolute_result
+    assert "TOP SECRET" not in relative_result
+    assert "TOP SECRET" not in absolute_result
+
+
 def test_use_skill_loads_body(tmp_path):
     from coding_cli.skills import Skill
 
