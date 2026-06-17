@@ -22,11 +22,17 @@ MAX_OUTPUT_CHARS = 20_000
 SHELL_TIMEOUT_SECONDS = 120
 MAX_DIFF_LINES = 120
 
+# Permission modes governing whether mutating tools run, ask, or are blocked.
+MODE_DEFAULT = "default"      # confirm every mutating tool
+MODE_AUTO = "auto-edit"       # auto-approve file edits; still confirm run_shell
+MODE_PLAN = "plan"            # block all mutations; the model plans instead
+
 # A confirmation callback: (action, detail, preview) -> bool. ``preview`` is an
 # optional unified diff the UI can show on demand. Returning False aborts.
 ConfirmFn = Callable[[str, str, str], bool]
 
 MUTATING_TOOLS = {"write_file", "edit_file", "run_shell"}
+EDIT_TOOLS = {"write_file", "edit_file"}
 
 
 class ToolError(Exception):
@@ -46,6 +52,8 @@ class ToolContext:
     # Workdir-relative paths the file tools refuse to touch (the ``.coding_cli``
     # snapshot dir is always reserved on top of these).
     deny: tuple[str, ...] = ()
+    # Permission mode governing mutating tools (see MODE_* constants).
+    mode: str = MODE_DEFAULT
 
 
 def _reserved_paths(ctx: ToolContext) -> "list[tuple[Path, str]]":
@@ -84,6 +92,14 @@ def _truncate(text: str) -> str:
 
 
 def _confirm(ctx: ToolContext, action: str, detail: str, preview: str = "") -> None:
+    if ctx.mode == MODE_PLAN:
+        raise ToolError(
+            "Plan mode is active: file changes and shell commands are disabled. "
+            "Do not call this tool — reply with a concise, numbered plan for the "
+            "user to approve."
+        )
+    if ctx.mode == MODE_AUTO and action in EDIT_TOOLS:
+        return  # auto-approve file edits
     if ctx.confirm is not None and not ctx.confirm(action, detail, preview):
         raise ToolError(f"User declined: {action}")
 

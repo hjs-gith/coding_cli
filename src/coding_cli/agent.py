@@ -16,6 +16,13 @@ from .skills import Skill
 # (event_type, detail) e.g. ("tool", "read_file: src/foo.py")
 ReporterFn = Callable[[str, str], None]
 
+# Prepended to user input in plan mode so the model plans instead of acting.
+PLAN_HINT = (
+    "[PLAN MODE — do not edit files or run shell commands. Use read-only tools to "
+    "research if needed, then reply with a short numbered implementation plan for "
+    "the user to approve.]\n\n"
+)
+
 
 @dataclass
 class Agent:
@@ -30,6 +37,7 @@ class Agent:
     report: Optional[ReporterFn] = None
     stream: bool = True
     deny: tuple[str, ...] = ()
+    mode: str = tools.MODE_DEFAULT
     _preamble_sent: bool = False
 
     def reset(self) -> None:
@@ -75,6 +83,7 @@ class Agent:
             load_skill=skills_mod.make_loader(self.skills),
             history=self.history,
             deny=self.deny,
+            mode=self.mode,
         )
 
     def _preamble(self) -> str:
@@ -82,6 +91,10 @@ class Agent:
 
     def run_turn(self, user_input: str) -> str:
         """Run a single user turn to completion, returning the final answer."""
+        # In plan mode, remind the model (per turn, since the mode can change
+        # mid-session) to research read-only and propose a plan instead of acting.
+        if self.mode == tools.MODE_PLAN:
+            user_input = PLAN_HINT + user_input
         # Inject the protocol preamble in-band on the first turn of a
         # conversation, since a Dify chat app has no API-settable system prompt.
         if not self._preamble_sent:
@@ -138,6 +151,7 @@ def build_agent(
     confirm: Optional[tools.ConfirmFn] = None,
     report: Optional[ReporterFn] = None,
     stream: bool = True,
+    mode: str = tools.MODE_DEFAULT,
 ) -> Agent:
     """Construct an Agent from a loaded Config, discovering skills."""
     client = DifyClient(
@@ -156,4 +170,5 @@ def build_agent(
         report=report,
         stream=stream,
         deny=config.deny,
+        mode=mode,
     )

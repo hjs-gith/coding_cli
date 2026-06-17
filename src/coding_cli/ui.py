@@ -106,11 +106,16 @@ def error(text: str) -> None:
     out(text, style="error")
 
 
-def prompt() -> str:
-    """Read a line of user input behind a styled ``you ›`` prompt."""
+def prompt(label: str = "") -> str:
+    """Read a line of user input behind a styled ``you ›`` prompt.
+
+    ``label`` (e.g. ``"plan"``) is shown as ``you (plan) ›`` to surface the
+    current permission mode.
+    """
+    tag = f" ({label})" if label else ""
     if _console is not None:
-        return _console.input("\n[user]you ›[/] ")
-    return input("\nyou › ")
+        return _console.input(f"\n[user]you{tag} ›[/] ")
+    return input(f"\nyou{tag} › ")
 
 
 def assistant(text: str) -> None:
