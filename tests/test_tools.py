@@ -72,6 +72,41 @@ def test_coding_cli_dir_is_off_limits(tmp_path):
     assert (tmp_path / ".coding_cli" / "journal.json").read_text() == "{}"
 
 
+def test_plan_mode_blocks_all_mutations(tmp_path):
+    (tmp_path / "a.txt").write_text("orig")
+    c = ToolContext(
+        workdir=tmp_path,
+        confirm=lambda a, d, preview="": True,  # would approve, but plan blocks
+        mode=tools.MODE_PLAN,
+    )
+    for call in (
+        ("write_file", {"path": "b.txt", "content": "x"}),
+        ("edit_file", {"path": "a.txt", "old": "orig", "new": "new"}),
+        ("run_shell", {"command": "echo hi"}),
+    ):
+        out = tools.execute(c, *call)
+        assert out.startswith("ERROR"), call
+        assert "Plan mode" in out, call
+    assert not (tmp_path / "b.txt").exists()
+    assert (tmp_path / "a.txt").read_text() == "orig"
+
+
+def test_auto_mode_approves_edits_but_still_confirms_shell(tmp_path):
+    # A confirm that always declines — auto-edit must bypass it for file edits
+    # but still consult it for run_shell.
+    c = ToolContext(
+        workdir=tmp_path,
+        confirm=lambda a, d, preview="": False,
+        mode=tools.MODE_AUTO,
+    )
+    out = tools.execute(c, "write_file", {"path": "a.txt", "content": "hi"})
+    assert "Created" in out
+    assert (tmp_path / "a.txt").read_text() == "hi"
+    shell = tools.execute(c, "run_shell", {"command": "echo hi"})
+    assert shell.startswith("ERROR")
+    assert "declined" in shell
+
+
 def test_coding_cli_dir_hidden_from_listing(tmp_path):
     (tmp_path / ".coding_cli" / "snapshots").mkdir(parents=True)
     (tmp_path / "real.txt").write_text("hi")

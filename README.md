@@ -118,18 +118,30 @@ The text to paste into the Dify console's system prompt is essentially the
 coding-cli                       # interactive REPL
 coding-cli --once "list files"   # one-shot, then exit
 coding-cli --workdir ./project   # operate in a specific directory
-coding-cli --no-confirm          # auto-approve writes/shell (use with care)
+coding-cli --mode plan           # propose a plan first; make no changes
+coding-cli --mode auto           # auto-apply file edits (still confirm shell)
 coding-cli --no-stream           # blocking instead of streaming responses
 coding-cli --undo                # revert the last recorded file change, then exit
 ```
 
-In the REPL: `/reset` (new conversation), `/cd <path>` (change the working
-directory, or no argument to print it), `/diff` (review this session's file
-changes), `/undo` (revert the most recent change, repeatable), `/skills` (list
-skills), `/help`, `/exit` (or Ctrl-D). File writes, edits, and shell commands ask
-for confirmation before running (unless `--no-confirm`). At the `[y/N/d]` prompt
-for a write or edit, press `d` to preview the exact diff before deciding. All file
-access is sandboxed to the working directory (and re-rooted when you `/cd`).
+In the REPL: `/plan`, `/auto`, `/normal` (switch permission mode), `/reset` (new
+conversation), `/cd <path>` (change the working directory, or no argument to
+print it), `/diff` (review this session's file changes), `/undo` (revert the most
+recent change, repeatable), `/skills` (list skills), `/help`, `/exit` (or
+Ctrl-D). At the `[y/N/d]` confirm prompt for a write or edit, press `d` to
+preview the exact diff before deciding. All file access is sandboxed to the
+working directory (and re-rooted when you `/cd`).
+
+### Permission modes
+
+- **default** — confirm every file edit and shell command before it runs.
+- **auto** (`--mode auto`, or the `--no-confirm` alias / `/auto`) — apply
+  `write_file`/`edit_file` without asking; `run_shell` still prompts.
+- **plan** (`--mode plan` / `/plan`) — make **no** changes; the agent researches
+  read-only and replies with a numbered plan. After it does, you're asked
+  `Approve plan? [a] auto-apply / [c] confirm-each / [N] no`; choosing `a` or `c`
+  switches to that mode and tells the agent to implement. The current mode shows
+  in the prompt, e.g. `you (plan) ›`.
 
 ### Output styling
 

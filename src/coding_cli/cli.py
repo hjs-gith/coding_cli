@@ -10,15 +10,25 @@ from . import ui
 from .agent import Agent, build_agent
 from .config import Config, ConfigError
 from .history import ChangeHistory
+from .tools import MODE_AUTO, MODE_DEFAULT, MODE_PLAN
+
+# Friendly --mode names mapped to the internal mode constants.
+_MODE_BY_NAME = {"default": MODE_DEFAULT, "auto": MODE_AUTO, "plan": MODE_PLAN}
+_LABEL_BY_MODE = {MODE_AUTO: "auto", MODE_PLAN: "plan"}  # default shows no label
 
 
-def _make_confirm(auto_yes: bool):
-    """Build the confirmation callback for mutating tools."""
+def _mode_label(mode: str) -> str:
+    return _LABEL_BY_MODE.get(mode, "")
+
+
+def _make_confirm():
+    """Build the interactive confirmation callback for mutating tools.
+
+    Auto-approval and plan-mode blocking are handled in ``tools._confirm`` by
+    mode, so this callback is only ever consulted when a real prompt is wanted.
+    """
 
     def confirm(action: str, detail: str, preview: str = "") -> bool:
-        if auto_yes:
-            ui.notice(f"  [auto-approved] {action}: {detail}")
-            return True
         ui.warn(f"\n  ⚠  {action}: {detail}")
         prompt = "  Proceed? [y/N/d] " if preview else "  Proceed? [y/N] "
         while True:
@@ -57,13 +67,13 @@ def _run_once(agent: Agent, prompt: str) -> int:
 
 def _repl(agent: Agent) -> int:
     ui.out("coding-cli — type a request, or /help. Ctrl-D to exit.", style="bold")
-    ui.notice(f"working in: {agent.workdir}")
+    ui.notice(f"working in: {agent.workdir}  (mode: {agent.mode})")
     if agent.skills:
         names = ", ".join(sorted(agent.skills))
         ui.notice(f"Skills available: {names}")
     while True:
         try:
-            line = ui.prompt().strip()
+            line = ui.prompt(_mode_label(agent.mode)).strip()
         except EOFError:
             print()
             return 0
@@ -78,13 +88,36 @@ def _repl(agent: Agent) -> int:
             continue
         try:
             answer = agent.run_turn(line)
+            ui.assistant(answer)
+            if agent.mode == MODE_PLAN:
+                _handle_plan_approval(agent)
         except KeyboardInterrupt:
             ui.warn("\n(interrupted)")
             continue
         except Exception as exc:
             ui.error(f"Error: {exc}")
             continue
-        ui.assistant(answer)
+
+
+def _handle_plan_approval(agent: Agent) -> None:
+    """After a plan-mode turn, let the user approve and start implementing."""
+    try:
+        reply = input(
+            "\n  Approve plan?  [a] auto-apply / [c] confirm-each / [N] no: "
+        ).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        reply = ""
+    if reply == "a":
+        agent.mode = MODE_AUTO
+    elif reply == "c":
+        agent.mode = MODE_DEFAULT
+    else:
+        ui.notice("Kept plan mode — refine the task, or /auto // /normal to edit.")
+        return
+    ui.notice(f"Plan approved — implementing (mode: {agent.mode}).")
+    answer = agent.run_turn("The plan is approved. Implement it now.")
+    ui.assistant(answer)
 
 
 def _handle_command(agent: Agent, line: str) -> bool:
@@ -111,8 +144,18 @@ def _handle_command(agent: Agent, line: str) -> bool:
         ui.diff(agent.session_diff())
     elif cmd == "/undo":
         ui.notice(agent.undo())
+    elif cmd in ("/plan", "/auto", "/normal"):
+        agent.mode = {
+            "/plan": MODE_PLAN,
+            "/auto": MODE_AUTO,
+            "/normal": MODE_DEFAULT,
+        }[cmd]
+        ui.notice(f"Mode: {agent.mode}")
     elif cmd == "/help":
-        ui.out("Commands: /reset  /cd  /diff  /undo  /skills  /help  /exit")
+        ui.out(
+            "Commands: /plan  /auto  /normal  /reset  /cd  /diff  /undo  "
+            "/skills  /help  /exit"
+        )
     else:
         ui.warn(f"Unknown command: {cmd}. Try /help.")
     return False
@@ -134,9 +177,16 @@ def main(argv: list[str] | None = None) -> int:
         help="Working directory the agent operates in (default: current dir).",
     )
     parser.add_argument(
+        "--mode",
+        choices=["default", "auto", "plan"],
+        default=None,
+        help="Permission mode: default (confirm edits), auto (auto-apply file "
+        "edits, still confirm shell), or plan (no changes; propose a plan first).",
+    )
+    parser.add_argument(
         "--no-confirm",
         action="store_true",
-        help="Auto-approve file writes and shell commands (use with care).",
+        help="Alias for --mode auto (auto-apply file edits).",
     )
     parser.add_argument(
         "--no-stream",
@@ -164,11 +214,19 @@ def main(argv: list[str] | None = None) -> int:
         ui.error(f"Configuration error: {exc}")
         return 2
 
+    if args.mode:
+        mode = _MODE_BY_NAME[args.mode]
+    elif args.no_confirm:
+        mode = MODE_AUTO
+    else:
+        mode = MODE_DEFAULT
+
     agent = build_agent(
         config,
-        confirm=_make_confirm(args.no_confirm),
+        confirm=_make_confirm(),
         report=_make_reporter(),
         stream=not args.no_stream,
+        mode=mode,
     )
 
     if args.once:

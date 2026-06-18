@@ -139,6 +139,30 @@ def test_sandbox_holds_after_cd(tmp_path):
     assert "TOP SECRET" not in absolute_result
 
 
+def test_plan_mode_prepends_hint(tmp_path):
+    from coding_cli import tools
+
+    agent = make_agent(tmp_path, ["here is the plan"], mode=tools.MODE_PLAN)
+    agent.run_turn("add a feature")
+    assert "PLAN MODE" in agent.client.queries[0]
+
+
+def test_plan_mode_blocks_edits_end_to_end(tmp_path):
+    from coding_cli import tools
+
+    responses = [
+        '```tool\n{"tool": "write_file", "args": {"path": "a.txt", "content": "x"}}\n```',
+        "I cannot edit in plan mode; here is the plan instead.",
+    ]
+    agent = make_agent(tmp_path, responses, mode=tools.MODE_PLAN)
+    answer = agent.run_turn("create a file")
+    # The blocked write is fed back to the model as a plan-mode error...
+    assert "Plan mode" in agent.client.queries[1]
+    # ...and no file was created.
+    assert not (tmp_path / "a.txt").exists()
+    assert answer == "I cannot edit in plan mode; here is the plan instead."
+
+
 def test_use_skill_loads_body(tmp_path):
     from coding_cli.skills import Skill
 
