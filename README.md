@@ -128,9 +128,17 @@ In the REPL: `/plan`, `/auto`, `/normal` (switch permission mode), `/reset` (new
 conversation), `/cd <path>` (change the working directory, or no argument to
 print it), `/diff` (review this session's file changes), `/undo` (revert the most
 recent change, repeatable), `/skills` (list skills), `/help`, `/exit` (or
-Ctrl-D). At the `[y/N/d]` confirm prompt for a write or edit, press `d` to
-preview the exact diff before deciding. All file access is sandboxed to the
-working directory (and re-rooted when you `/cd`).
+Ctrl-D). All file access is sandboxed to the working directory (and re-rooted
+when you `/cd`).
+
+### Confirming tool calls
+
+Each tool call shows a one-line `↳ purpose` explaining why the agent is making it
+(the model supplies it), so complex shell commands are easier to judge at a
+glance. At the confirm prompt you can answer `y` / `n`, press `d` to preview the
+exact diff (for writes/edits), or **type a message** instead — that declines the
+call *and* sends your words back to the model (e.g. "use uv instead, not pip"),
+so it can adjust rather than just stop.
 
 ### Permission modes
 

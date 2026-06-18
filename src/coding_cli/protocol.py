@@ -33,12 +33,14 @@ When you need to take an action, reply with EXACTLY ONE fenced block and nothing
 else, in this exact form:
 
 ```tool
-{"tool": "read_file", "args": {"path": "src/foo.py"}}
+{"tool": "run_shell", "args": {"command": "pytest -q"}, "purpose": "run the tests"}
 ```
 
 Rules:
 - Emit at most one tool call per message. After you see its TOOL_RESULT, decide
   the next step.
+- Include a short one-line "purpose" in plain language saying why you're making
+  this call (especially for run_shell, so the user can approve at a glance).
 - Use double-quoted JSON. Do not add commentary around the tool block. If you
   cannot emit the fence, a bare JSON object on its own is still accepted.
 - When the task is complete, reply normally in plain text (no tool block); that
@@ -60,6 +62,7 @@ class ToolCall:
 
     name: str
     args: dict
+    purpose: str = ""  # optional one-line explanation of why the call is made
 
 
 def build_preamble(skill_catalog: Optional[Iterable[tuple[str, str]]] = None) -> str:
@@ -92,7 +95,10 @@ def _payload_to_call(payload: object) -> Optional[ToolCall]:
         return None
     if not isinstance(args, dict):
         return None
-    return ToolCall(name=name, args=args)
+    purpose = payload.get("purpose", "")
+    if not isinstance(purpose, str):
+        purpose = ""
+    return ToolCall(name=name, args=args, purpose=purpose)
 
 
 def _iter_json_objects(text: str) -> Iterable[object]:
