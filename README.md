@@ -143,6 +143,31 @@ working directory (and re-rooted when you `/cd`).
   switches to that mode and tells the agent to implement. The current mode shows
   in the prompt, e.g. `you (plan) ›`.
 
+#### Getting the agent to finish an approved plan
+
+The agent decides it's "done" by returning a reply with no further tool call, and
+one turn runs at most `CODING_CLI_MAX_TOOL_ITERS` tool steps (default 12). So on
+longer tasks it can stop early or run out of steps. There is no built-in
+checklist that forces every plan step to completion — these levers make it far
+more reliable:
+
+- **Raise the step budget.** Set `CODING_CLI_MAX_TOOL_ITERS` (e.g. `40`) in your
+  `.env` so a single implementation turn has room to finish a multi-file task.
+- **Add a persistence instruction to the Dify system prompt** (see the section
+  above on moving the preamble into Dify). For example:
+
+  > Work autonomously until the task is fully complete. Do not stop after a
+  > single step — keep calling tools until every step of the approved plan is
+  > done. Before finishing, run the project's tests or build and fix any
+  > failures, then give a short summary of what changed.
+
+- **Restate the plan when you approve it.** Instead of relying on the bare
+  "implement it now", tell the agent: *"Implement the plan step by step. After
+  each step, state which step you finished and what remains. Don't stop until all
+  steps are done and the tests pass."*
+- **If it stops early or hits the step cap, just type `continue`** — the same
+  Dify conversation resumes where it left off.
+
 ### Output styling
 
 With the `rich` extra installed, the three roles are visually distinct: your
