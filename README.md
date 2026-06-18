@@ -91,7 +91,10 @@ Dify app's system prompt, and keep the *dynamic* skills catalog injected in-band
 | Skills catalog (changes as you add skill folders) | **In-band** (as-is) | Discovered locally at runtime; Dify can't know your `./skills` contents. |
 
 The text to paste into the Dify console's system prompt is essentially the
-`_BASE_PREAMBLE` string in [`protocol.py`](src/coding_cli/protocol.py).
+`_BASE_PREAMBLE` string in [`protocol.py`](src/coding_cli/protocol.py). A
+ready-to-paste version — including autonomy/persistence guidance and notes on
+what to configure on the Dify side — is provided in
+[`system_prompt.md`](system_prompt.md).
 
 **Trade-offs:**
 
