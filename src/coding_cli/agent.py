@@ -124,8 +124,9 @@ class Agent:
     def _announce(self, call: protocol.ToolCall) -> None:
         if self.report is None:
             return
-        detail = _summarize_call(call)
-        self.report("tool", detail)
+        self.report("tool", _summarize_call(call))
+        if call.purpose:
+            self.report("tool_purpose", call.purpose)
 
     def _announce_result(self, name: str, output: str) -> None:
         if self.report is None:

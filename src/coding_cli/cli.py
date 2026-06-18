@@ -10,7 +10,7 @@ from . import ui
 from .agent import Agent, build_agent
 from .config import Config, ConfigError
 from .history import ChangeHistory
-from .tools import MODE_AUTO, MODE_DEFAULT, MODE_PLAN
+from .tools import MODE_AUTO, MODE_DEFAULT, MODE_PLAN, ConfirmDecision
 
 # Friendly --mode names mapped to the internal mode constants.
 _MODE_BY_NAME = {"default": MODE_DEFAULT, "auto": MODE_AUTO, "plan": MODE_PLAN}
@@ -28,19 +28,26 @@ def _make_confirm():
     mode, so this callback is only ever consulted when a real prompt is wanted.
     """
 
-    def confirm(action: str, detail: str, preview: str = "") -> bool:
+    def confirm(action: str, detail: str, preview: str = "") -> ConfirmDecision:
         ui.warn(f"\n  ⚠  {action}: {detail}")
-        prompt = "  Proceed? [y/N/d] " if preview else "  Proceed? [y/N] "
+        diff_opt = "[d]iff / " if preview else ""
+        prompt = f"  Proceed? [y]es / [n]o / {diff_opt}or type a message: "
         while True:
             try:
-                reply = input(prompt).strip().lower()
+                reply = input(prompt).strip()
             except (EOFError, KeyboardInterrupt):
                 print()
-                return False
-            if reply == "d" and preview:
+                return ConfirmDecision(False)
+            low = reply.lower()
+            if low in ("y", "yes"):
+                return ConfirmDecision(True)
+            if low == "d" and preview:
                 ui.diff(preview)
                 continue
-            return reply in ("y", "yes")
+            if low in ("n", "no", ""):
+                return ConfirmDecision(False)
+            # Anything else is a message back to the model (declines + explains).
+            return ConfirmDecision(False, feedback=reply)
 
     return confirm
 
@@ -49,6 +56,8 @@ def _make_reporter():
     def report(event: str, detail: str) -> None:
         if event == "tool":
             ui.tool(detail)
+        elif event == "tool_purpose":
+            ui.tool_purpose(detail)
         elif event == "tool_result":
             ui.tool_result(detail)
 

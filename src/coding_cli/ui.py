@@ -140,6 +140,10 @@ def tool(detail: str) -> None:
     out(tool_line(detail), style="tool")
 
 
+def tool_purpose(text: str) -> None:
+    out(f"    ↳ {text}", style="tool_done")
+
+
 def tool_result(detail: str) -> None:
     out(tool_done(detail), style="tool_done")
 

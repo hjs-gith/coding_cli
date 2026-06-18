@@ -9,6 +9,29 @@ def test_parse_valid_tool_call():
     assert call.args == {"path": "a.py"}
 
 
+def test_parse_captures_purpose():
+    text = (
+        '```tool\n{"tool": "run_shell", "args": {"command": "pytest -q"}, '
+        '"purpose": "run the tests"}\n```'
+    )
+    call = protocol.parse_tool_call(text)
+    assert call is not None
+    assert call.purpose == "run the tests"
+
+
+def test_parse_purpose_defaults_empty():
+    text = '```tool\n{"tool": "read_file", "args": {"path": "a.py"}}\n```'
+    call = protocol.parse_tool_call(text)
+    assert call.purpose == ""
+
+
+def test_parse_non_string_purpose_ignored():
+    text = '```tool\n{"tool": "read_file", "args": {"path": "a.py"}, "purpose": 5}\n```'
+    call = protocol.parse_tool_call(text)
+    assert call is not None
+    assert call.purpose == ""
+
+
 def test_parse_no_block_returns_none():
     assert protocol.parse_tool_call("just a plain final answer") is None
 

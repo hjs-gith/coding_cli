@@ -163,6 +163,31 @@ def test_plan_mode_blocks_edits_end_to_end(tmp_path):
     assert answer == "I cannot edit in plan mode; here is the plan instead."
 
 
+def test_purpose_is_announced(tmp_path):
+    (tmp_path / "a.txt").write_text("hi")
+    responses = [
+        '```tool\n{"tool": "read_file", "args": {"path": "a.txt"}, '
+        '"purpose": "inspect the file"}\n```',
+        "done",
+    ]
+    events = []
+    agent = make_agent(tmp_path, responses, report=lambda e, d: events.append((e, d)))
+    agent.run_turn("look at a.txt")
+    assert ("tool_purpose", "inspect the file") in events
+
+
+def test_no_purpose_no_event(tmp_path):
+    (tmp_path / "a.txt").write_text("hi")
+    responses = [
+        '```tool\n{"tool": "read_file", "args": {"path": "a.txt"}}\n```',
+        "done",
+    ]
+    events = []
+    agent = make_agent(tmp_path, responses, report=lambda e, d: events.append((e, d)))
+    agent.run_turn("look at a.txt")
+    assert not any(e == "tool_purpose" for e, _ in events)
+
+
 def test_use_skill_loads_body(tmp_path):
     from coding_cli.skills import Skill
 

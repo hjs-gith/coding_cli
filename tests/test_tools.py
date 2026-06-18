@@ -1,11 +1,26 @@
 import pytest
 
 from coding_cli import tools
-from coding_cli.tools import ToolContext
+from coding_cli.tools import ConfirmDecision, ToolContext
 
 
 def ctx(tmp_path, confirm=None):
     return ToolContext(workdir=tmp_path, confirm=confirm)
+
+
+def test_confirm_feedback_reaches_model(tmp_path):
+    c = ctx(tmp_path, confirm=lambda a, d, p="": ConfirmDecision(False, "use npm instead"))
+    out = tools.execute(c, "write_file", {"path": "a.txt", "content": "x"})
+    assert out.startswith("ERROR")
+    assert "Feedback: use npm instead" in out
+    assert not (tmp_path / "a.txt").exists()
+
+
+def test_confirm_decision_approve(tmp_path):
+    c = ctx(tmp_path, confirm=lambda a, d, p="": ConfirmDecision(True))
+    out = tools.execute(c, "write_file", {"path": "a.txt", "content": "hi"})
+    assert "Created" in out
+    assert (tmp_path / "a.txt").read_text() == "hi"
 
 
 def test_write_then_read(tmp_path):

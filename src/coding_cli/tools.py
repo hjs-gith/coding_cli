@@ -27,9 +27,18 @@ MODE_DEFAULT = "default"      # confirm every mutating tool
 MODE_AUTO = "auto-edit"       # auto-approve file edits; still confirm run_shell
 MODE_PLAN = "plan"            # block all mutations; the model plans instead
 
-# A confirmation callback: (action, detail, preview) -> bool. ``preview`` is an
-# optional unified diff the UI can show on demand. Returning False aborts.
-ConfirmFn = Callable[[str, str, str], bool]
+@dataclass
+class ConfirmDecision:
+    """A confirm callback's answer: approve/deny plus optional user feedback."""
+
+    approved: bool
+    feedback: str = ""
+
+
+# A confirmation callback: (action, detail, preview) -> bool | ConfirmDecision.
+# ``preview`` is an optional unified diff the UI can show on demand. A falsey
+# answer aborts; a ConfirmDecision may also carry a message back to the model.
+ConfirmFn = Callable[[str, str, str], "bool | ConfirmDecision"]
 
 MUTATING_TOOLS = {"write_file", "edit_file", "run_shell"}
 EDIT_TOOLS = {"write_file", "edit_file"}
@@ -100,8 +109,18 @@ def _confirm(ctx: ToolContext, action: str, detail: str, preview: str = "") -> N
         )
     if ctx.mode == MODE_AUTO and action in EDIT_TOOLS:
         return  # auto-approve file edits
-    if ctx.confirm is not None and not ctx.confirm(action, detail, preview):
-        raise ToolError(f"User declined: {action}")
+    if ctx.confirm is None:
+        return
+    decision = ctx.confirm(action, detail, preview)
+    if isinstance(decision, ConfirmDecision):
+        approved, feedback = decision.approved, decision.feedback
+    else:
+        approved, feedback = bool(decision), ""
+    if not approved:
+        message = f"User declined: {action}."
+        if feedback:
+            message += f" Feedback: {feedback}"
+        raise ToolError(message)
 
 
 def _make_diff(path: str, before: str, after: str) -> str:
