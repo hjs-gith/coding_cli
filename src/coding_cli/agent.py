@@ -23,6 +23,13 @@ PLAN_HINT = (
     "the user to approve.]\n\n"
 )
 
+# Prepended once when leaving plan mode, to countermand the accumulated plan-mode
+# instructions in the conversation so the model resumes editing.
+EXIT_PLAN_HINT = (
+    "[Plan mode is over — you may now edit files and run shell commands. Disregard "
+    "the earlier instructions to only plan, and carry out the work.]\n\n"
+)
+
 
 @dataclass
 class Agent:
@@ -39,6 +46,18 @@ class Agent:
     deny: tuple[str, ...] = ()
     mode: str = tools.MODE_DEFAULT
     _preamble_sent: bool = False
+    _exit_plan_pending: bool = False
+
+    def set_mode(self, mode: str) -> None:
+        """Switch the permission mode.
+
+        Leaving plan mode arms a one-shot hint (consumed on the next turn) that
+        tells the model plan mode is over, countermanding the accumulated
+        plan-mode instructions in the Dify conversation so it resumes editing.
+        """
+        if self.mode == tools.MODE_PLAN and mode != tools.MODE_PLAN:
+            self._exit_plan_pending = True
+        self.mode = mode
 
     def reset(self) -> None:
         """Begin a fresh conversation (new Dify thread + re-send preamble).
@@ -95,6 +114,11 @@ class Agent:
         # mid-session) to research read-only and propose a plan instead of acting.
         if self.mode == tools.MODE_PLAN:
             user_input = PLAN_HINT + user_input
+        elif self._exit_plan_pending:
+            # Just left plan mode: countermand the accumulated "only plan"
+            # instructions so the model resumes editing. One-shot.
+            user_input = EXIT_PLAN_HINT + user_input
+            self._exit_plan_pending = False
         # Inject the protocol preamble in-band on the first turn of a
         # conversation, since a Dify chat app has no API-settable system prompt.
         if not self._preamble_sent:

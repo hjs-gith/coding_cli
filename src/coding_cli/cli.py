@@ -110,20 +110,24 @@ def _repl(agent: Agent) -> int:
 
 def _handle_plan_approval(agent: Agent) -> None:
     """After a plan-mode turn, let the user approve and start implementing."""
-    try:
-        reply = input(
-            "\n  Approve plan?  [a] auto-apply / [c] confirm-each / [N] no: "
-        ).strip().lower()
-    except (EOFError, KeyboardInterrupt):
-        print()
-        reply = ""
-    if reply == "a":
-        agent.mode = MODE_AUTO
-    elif reply == "c":
-        agent.mode = MODE_DEFAULT
-    else:
-        ui.notice("Kept plan mode — refine the task, or /auto // /normal to edit.")
-        return
+    while True:
+        try:
+            reply = input(
+                "\n  Approve plan?  [a] auto-apply / [c] confirm-each / [N] no: "
+            ).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            reply = ""
+        if reply in ("a", "auto", "y", "yes"):
+            agent.set_mode(MODE_AUTO)
+            break
+        if reply in ("c", "confirm"):
+            agent.set_mode(MODE_DEFAULT)
+            break
+        if reply in ("n", "no", ""):
+            ui.notice("Kept plan mode — refine the task, or /auto // /normal to edit.")
+            return
+        ui.warn("  Please answer a, c, or n.")
     ui.notice(f"Plan approved — implementing (mode: {agent.mode}).")
     answer = agent.run_turn("The plan is approved. Implement it now.")
     ui.assistant(answer)
@@ -154,11 +158,11 @@ def _handle_command(agent: Agent, line: str) -> bool:
     elif cmd == "/undo":
         ui.notice(agent.undo())
     elif cmd in ("/plan", "/auto", "/normal"):
-        agent.mode = {
+        agent.set_mode({
             "/plan": MODE_PLAN,
             "/auto": MODE_AUTO,
             "/normal": MODE_DEFAULT,
-        }[cmd]
+        }[cmd])
         ui.notice(f"Mode: {agent.mode}")
     elif cmd == "/help":
         ui.out(

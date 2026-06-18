@@ -188,6 +188,30 @@ def test_no_purpose_no_event(tmp_path):
     assert not any(e == "tool_purpose" for e, _ in events)
 
 
+def test_exit_plan_hint_emitted_once_after_leaving_plan(tmp_path):
+    from coding_cli import tools
+
+    agent = make_agent(tmp_path, ["done1", "done2"], mode=tools.MODE_PLAN)
+    agent.set_mode(tools.MODE_AUTO)
+    assert agent._exit_plan_pending is True
+    agent.run_turn("first after switch")
+    assert "Plan mode is over" in agent.client.queries[0]
+    assert agent._exit_plan_pending is False
+    # The hint is one-shot: the next turn does not repeat it.
+    agent.run_turn("second")
+    assert "Plan mode is over" not in agent.client.queries[1]
+
+
+def test_set_mode_no_hint_when_not_leaving_plan(tmp_path):
+    from coding_cli import tools
+
+    agent = make_agent(tmp_path, ["x"], mode=tools.MODE_DEFAULT)
+    agent.set_mode(tools.MODE_AUTO)
+    assert agent._exit_plan_pending is False
+    agent.run_turn("go")
+    assert "Plan mode is over" not in agent.client.queries[0]
+
+
 def test_use_skill_loads_body(tmp_path):
     from coding_cli.skills import Skill
 
