@@ -217,6 +217,8 @@ def run_shell(ctx: ToolContext, command: str) -> str:
             cwd=str(ctx.workdir),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=SHELL_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired:

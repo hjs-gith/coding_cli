@@ -11,3 +11,6 @@ uv.lock
 
 # Snapshot/undo history created when running coding-cli
 .coding_cli/
+
+# Temporary/testing scratch projects
+projects/
