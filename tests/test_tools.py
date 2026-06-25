@@ -171,6 +171,30 @@ def test_run_shell(tmp_path):
     assert "hi" in out
 
 
+def test_run_shell_utf8_output(tmp_path):
+    # bytes e2 86 92 = "→"; the byte 0xe2 is what crashed cp949 decoding.
+    out = tools.execute(ctx(tmp_path), "run_shell", {"command": r"printf '\342\206\222'"})
+    assert "→" in out
+
+
+def test_run_shell_invalid_bytes_do_not_crash(tmp_path):
+    # 0xff / 0xfe are invalid UTF-8; errors="replace" must keep it from raising.
+    out = tools.execute(ctx(tmp_path), "run_shell", {"command": r"printf '\377\376'"})
+    assert "exit code: 0" in out
+    assert "�" in out  # replacement character, not an exception
+
+
+def test_edit_file_non_utf8_returns_clean_error(tmp_path):
+    p = tmp_path / "bin.dat"
+    p.write_bytes(b"\xff\xfe hello world")
+    out = tools.execute(
+        ctx(tmp_path), "edit_file", {"path": "bin.dat", "old": "hello", "new": "bye"}
+    )
+    assert out.startswith("ERROR")
+    assert "UTF-8" in out
+    assert p.read_bytes() == b"\xff\xfe hello world"  # untouched
+
+
 def test_confirm_declined_blocks_write(tmp_path):
     c = ctx(tmp_path, confirm=lambda action, detail, preview="": False)
     out = tools.execute(c, "write_file", {"path": "a.txt", "content": "x"})

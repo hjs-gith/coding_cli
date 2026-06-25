@@ -187,7 +187,10 @@ def edit_file(ctx: ToolContext, path: str, old: str, new: str) -> str:
     target = _resolve(ctx, path)
     if not target.is_file():
         raise ToolError(f"No such file: {path}")
-    text = target.read_text(encoding="utf-8")
+    try:
+        text = target.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        raise ToolError(f"Cannot edit {path}: not a UTF-8 text file.")
     count = text.count(old)
     if count == 0:
         raise ToolError(f"`old` string not found in {path}.")
@@ -217,6 +220,8 @@ def run_shell(ctx: ToolContext, command: str) -> str:
             cwd=str(ctx.workdir),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=SHELL_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired:
