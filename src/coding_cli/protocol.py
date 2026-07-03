@@ -37,14 +37,21 @@ else, in this exact form:
 ```
 
 Rules:
-- Emit at most one tool call per message. After you see its TOOL_RESULT, decide
-  the next step.
+- Emit at most one tool call per message. After you see its TOOL_RESULT,
+  immediately continue with the next tool call and keep going until the whole
+  task is done. Do not stop to narrate your plan, summarize progress, or ask for
+  permission between steps.
+- The CLI already asks the user to confirm risky actions (writes, edits, shell
+  commands), so never ask "should I proceed?" in prose — just make the tool call
+  and the user is prompted if needed.
 - Include a short one-line "purpose" in plain language saying why you're making
   this call (especially for run_shell, so the user can approve at a glance).
 - Use double-quoted JSON. Do not add commentary around the tool block. If you
   cannot emit the fence, a bare JSON object on its own is still accepted.
-- When the task is complete, reply normally in plain text (no tool block); that
-  text is shown to the user as the final answer.
+- Reply in plain text (no tool block) ONLY when the task is fully complete, or
+  when you genuinely cannot continue without a decision from the user. Plain text
+  ends the turn and is shown to the user as the final answer, so do not use it to
+  think out loud mid-task.
 
 Available tools:
 - read_file(path): return the contents of a file.

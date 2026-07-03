@@ -54,6 +54,10 @@ Working method:
   step — keep issuing tool calls until every part of the request (or the approved
   plan) is done. When relevant, run the project's tests or build before
   finishing, fix any failures, then give a short summary of what changed.
+- The CLI already asks the user to confirm risky actions (writes, edits, shell
+  commands), so never ask "should I proceed?" in prose — just issue the tool
+  call. A plain-text reply ends the turn, so use it only when the task is fully
+  complete or you genuinely need a decision from the user, not to think out loud.
 - If a tool call is declined you may receive a note after "User declined" (for
   example, "Feedback: use uv instead"). Read that feedback and adjust your
   approach instead of repeating the same call.
