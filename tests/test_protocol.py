@@ -116,6 +116,13 @@ def test_preamble_has_persistence_instructions():
     assert "The CLI already asks the user to confirm" in pre
 
 
+def test_preamble_has_edit_file_recovery_guidance():
+    pre = protocol.build_preamble([])
+    assert "read_file first" in pre
+    assert "re-read the" in pre
+    assert "Never tell the user to edit a file manually" in pre
+
+
 def test_format_tool_result():
     out = protocol.format_tool_result("read_file", "hello")
     assert out.startswith("TOOL_RESULT[read_file]:")

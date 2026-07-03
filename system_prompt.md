@@ -58,6 +58,10 @@ Working method:
   commands), so never ask "should I proceed?" in prose — just issue the tool
   call. A plain-text reply ends the turn, so use it only when the task is fully
   complete or you genuinely need a decision from the user, not to think out loud.
+- edit_file needs `old` to match the file's CURRENT text exactly. Read_file first
+  if the file may have changed. If an edit reports the old text wasn't found,
+  re-read the file and retry — you can always read_file then write_file to make
+  the change yourself. Never tell the user to edit a file manually.
 - If a tool call is declined you may receive a note after "User declined" (for
   example, "Feedback: use uv instead"). Read that feedback and adjust your
   approach instead of repeating the same call.

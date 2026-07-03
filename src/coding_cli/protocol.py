@@ -44,6 +44,10 @@ Rules:
 - The CLI already asks the user to confirm risky actions (writes, edits, shell
   commands), so never ask "should I proceed?" in prose — just make the tool call
   and the user is prompted if needed.
+- Before edit_file, read_file first if you haven't just read the file or the user
+  may have changed it. If an edit reports the old text wasn't found, re-read the
+  file and retry — you can always read_file then write_file to make the change
+  yourself. Never tell the user to edit a file manually.
 - Include a short one-line "purpose" in plain language saying why you're making
   this call (especially for run_shell, so the user can approve at a glance).
 - Use double-quoted JSON. Do not add commentary around the tool block. If you
@@ -57,7 +61,9 @@ Available tools:
 - read_file(path): return the contents of a file.
 - list_dir(path): list entries in a directory.
 - write_file(path, content): create or overwrite a file.
-- edit_file(path, old, new): replace an exact unique substring in a file.
+- edit_file(path, old, new): replace an exact unique substring in a file. `old`
+  must match the file's CURRENT text exactly, so read_file first if it may have
+  changed.
 - run_shell(command): run a shell command and return its output.
 - use_skill(name): load the full instructions for a named skill, then follow them.
 """
