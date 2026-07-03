@@ -62,6 +62,19 @@ def test_edit_file_not_unique(tmp_path):
     assert "not unique" in out
 
 
+def test_edit_file_miss_guides_reread(tmp_path):
+    (tmp_path / "a.txt").write_text("current contents")
+    out = tools.execute(
+        ctx(tmp_path), "edit_file", {"path": "a.txt", "old": "stale", "new": "x"}
+    )
+    assert out.startswith("ERROR")
+    assert "not found" in out
+    assert "read_file" in out
+    assert "manually" in out  # instructs against punting to manual editing
+    # File is untouched.
+    assert (tmp_path / "a.txt").read_text() == "current contents"
+
+
 def test_path_escape_rejected(tmp_path):
     out = tools.execute(ctx(tmp_path), "read_file", {"path": "../secret"})
     assert out.startswith("ERROR")

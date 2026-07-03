@@ -193,11 +193,17 @@ def edit_file(ctx: ToolContext, path: str, old: str, new: str) -> str:
         raise ToolError(f"Cannot edit {path}: not a UTF-8 text file.")
     count = text.count(old)
     if count == 0:
-        raise ToolError(f"`old` string not found in {path}.")
+        raise ToolError(
+            f"`old` string not found in {path}. The file may have changed since "
+            "you last saw it — call read_file to get its current contents, then "
+            "retry edit_file with an exact snippet (or use write_file to rewrite "
+            "it). Do not ask the user to edit the file manually."
+        )
     if count > 1:
         raise ToolError(
             f"`old` string is not unique in {path} (found {count} times). "
-            "Include more surrounding context."
+            "Include more surrounding context to identify one location "
+            "(read_file to see it)."
         )
     updated = text.replace(old, new, 1)
     preview = _make_diff(path, text, updated)
