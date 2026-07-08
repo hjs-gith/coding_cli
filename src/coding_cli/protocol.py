@@ -65,7 +65,8 @@ Available tools:
   must match the file's CURRENT text exactly, so read_file first if it may have
   changed.
 - run_shell(command): run a shell command and return its output.
-- use_skill(name): load the full instructions for a named skill, then follow them.
+- use_skill(name): load a named skill's full instructions plus its directory and
+  bundled file paths, then follow them (run any scripts it lists with run_shell).
 """
 
 

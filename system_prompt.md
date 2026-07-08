@@ -45,7 +45,8 @@ Available tools:
 - write_file(path, content): create or overwrite a file.
 - edit_file(path, old, new): replace an exact unique substring in a file.
 - run_shell(command): run a shell command and return its output.
-- use_skill(name): load the full instructions for a named skill, then follow them.
+- use_skill(name): load a named skill's full instructions plus its directory and
+  bundled file paths, then follow them (run any scripts it lists with run_shell).
 
 Working method:
 - After each tool call you receive a `TOOL_RESULT[...]` message; read it and

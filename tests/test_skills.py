@@ -28,6 +28,22 @@ def test_loader_returns_body(tmp_path):
     assert "Step 1. Wave." in out
 
 
+def test_loader_includes_directory_and_script_paths(tmp_path):
+    d = write_skill(tmp_path, "demo", "a demo", body="Run run.py.")
+    (d / "run.py").write_text("print('hi')\n")
+    (d / "helper.py").write_text("x = 1\n")
+    # Noise that must be excluded.
+    (d / "__pycache__").mkdir()
+    (d / "__pycache__" / "run.cpython.pyc").write_text("junk")
+    found = skills_mod.discover_skills(tmp_path)
+    out = skills_mod.make_loader(found)("demo")
+    assert "Skill directory:" in out
+    assert str(d / "run.py") in out          # full path so run_shell can use it
+    assert str(d / "helper.py") in out
+    assert "SKILL.md" not in out.split("Bundled files")[-1]  # SKILL.md excluded
+    assert "__pycache__" not in out
+
+
 def test_loader_unknown_name(tmp_path):
     found = skills_mod.discover_skills(tmp_path)
     load = skills_mod.make_loader(found)

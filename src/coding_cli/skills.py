@@ -13,6 +13,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+# Cap the file listing appended to a loaded skill so a stray large folder can't
+# flood the model's context.
+MAX_SKILL_FILES = 50
+
 
 @dataclass
 class Skill:
@@ -96,6 +100,20 @@ def _split_frontmatter(text: str) -> Tuple[Dict[str, str], str]:
     return front, body
 
 
+def _skill_files(directory: Path) -> List[Path]:
+    """Absolute paths of a skill's bundled files (scripts, data), excluding the
+    SKILL.md itself and noise like hidden dirs and ``__pycache__``."""
+    files: List[Path] = []
+    for p in sorted(directory.rglob("*")):
+        if not p.is_file() or p.name == "SKILL.md":
+            continue
+        rel_parts = p.relative_to(directory).parts
+        if any(part.startswith(".") or part == "__pycache__" for part in rel_parts):
+            continue
+        files.append(p)
+    return files
+
+
 def make_loader(skills: Dict[str, Skill]):
     """Build a ``load_skill(name) -> str`` callable for the tool context."""
 
@@ -105,6 +123,19 @@ def make_loader(skills: Dict[str, Skill]):
             available = ", ".join(sorted(skills)) or "(none)"
             return f"ERROR: unknown skill '{name}'. Available skills: {available}"
         header = f"# Skill: {skill.name}\n{skill.description}\n\n"
-        return header + skill.body
+        directory = skill.path.parent
+        section = f"\n\n---\nSkill directory: {directory}"
+        files = _skill_files(directory)
+        if files:
+            shown = files[:MAX_SKILL_FILES]
+            listing = "\n".join(f"- {p}" for p in shown)
+            if len(files) > MAX_SKILL_FILES:
+                listing += f"\n- ... ({len(files) - MAX_SKILL_FILES} more)"
+            section += (
+                "\nBundled files (use these full paths — run scripts with "
+                "run_shell, read files with read_file when inside the working "
+                "directory):\n" + listing
+            )
+        return header + skill.body + section
 
     return load_skill
