@@ -16,6 +16,10 @@ from .skills import Skill
 # (event_type, detail) e.g. ("tool", "read_file: src/foo.py")
 ReporterFn = Callable[[str, str], None]
 
+# Cap on a between-steps status note shown to the user (keeps a runaway note
+# from flooding the screen mid-loop).
+MAX_NOTE_CHARS = 600
+
 # Prepended to user input in plan mode so the model plans instead of acting.
 PLAN_HINT = (
     "[PLAN MODE — do not edit files or run shell commands. Use read-only tools to "
@@ -135,6 +139,9 @@ class Agent:
                 # No tool block -> this is the final answer.
                 return result.answer.strip()
 
+            note = protocol.extract_note(result.answer)
+            if note and self.report is not None:
+                self.report("note", note[:MAX_NOTE_CHARS])
             self._announce(call)
             output = tools.execute(ctx, call.name, call.args)
             self._announce_result(call.name, output)

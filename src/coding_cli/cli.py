@@ -86,7 +86,9 @@ def _make_confirm(get_workdir):
 
 def _make_reporter():
     def report(event: str, detail: str) -> None:
-        if event == "tool":
+        if event == "note":
+            ui.note(detail)
+        elif event == "tool":
             ui.tool(detail)
         elif event == "tool_purpose":
             ui.tool_purpose(detail)

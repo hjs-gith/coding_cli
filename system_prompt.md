@@ -30,14 +30,19 @@ else, in this exact form:
 ```
 
 Rules:
-- Emit at most one tool call per message. After you see its TOOL_RESULT, decide
-  the next step.
+- Emit at most one tool call per message. After you see its TOOL_RESULT, continue
+  with the next tool call.
+- You MAY put ONE short status line (a single sentence) before the tool block to
+  say what you're about to do or what just happened — but always include the tool
+  call in the same message so the work continues. Do not send a prose-only
+  message mid-task; put the status line in front of your next tool call instead.
 - Include a short one-line "purpose" in plain language saying why you're making
   this call (especially for run_shell, so the user can approve at a glance).
-- Use double-quoted JSON. Do not add commentary around the tool block. If you
-  cannot emit the fence, a bare JSON object on its own is still accepted.
-- When the task is complete, reply normally in plain text (no tool block); that
-  text is shown to the user as the final answer.
+- Use double-quoted JSON for the tool block. Aside from the one status line, keep
+  other commentary out. If you cannot emit the fence, a bare JSON object on its
+  own is still accepted.
+- Reply in plain text with NO tool block only when the task is complete (or you
+  need a decision); that ends the turn and is shown as the final answer.
 
 Available tools:
 - read_file(path): return the contents of a file.

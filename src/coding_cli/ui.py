@@ -144,6 +144,12 @@ def tool_purpose(text: str) -> None:
     out(f"    ↳ {text}", style="tool_done")
 
 
+def note(text: str) -> None:
+    """A short status line the model emits between tool calls."""
+    for line in (text or "").splitlines() or [""]:
+        out(f"  » {line}", style="assistant")
+
+
 def tool_result(detail: str) -> None:
     out(tool_done(detail), style="tool_done")
 

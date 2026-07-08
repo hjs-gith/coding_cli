@@ -212,6 +212,33 @@ def test_set_mode_no_hint_when_not_leaving_plan(tmp_path):
     assert "Plan mode is over" not in agent.client.queries[0]
 
 
+def test_status_note_reported_and_loop_continues(tmp_path):
+    (tmp_path / "a.txt").write_text("data")
+    responses = [
+        'Reading the file now.\n```tool\n{"tool": "read_file", "args": {"path": "a.txt"}}\n```',
+        "All done.",
+    ]
+    events = []
+    agent = make_agent(tmp_path, responses, report=lambda e, d: events.append((e, d)))
+    answer = agent.run_turn("look at a.txt")
+    assert ("note", "Reading the file now.") in events
+    # The tool still ran (its result went back to the model) and the turn finished.
+    assert "TOOL_RESULT[read_file]" in agent.client.queries[1]
+    assert answer == "All done."
+
+
+def test_bare_json_tool_call_emits_no_note(tmp_path):
+    (tmp_path / "a.txt").write_text("data")
+    responses = [
+        'ignore me {"tool": "read_file", "args": {"path": "a.txt"}}',
+        "done",
+    ]
+    events = []
+    agent = make_agent(tmp_path, responses, report=lambda e, d: events.append((e, d)))
+    agent.run_turn("go")
+    assert not any(e == "note" for e, _ in events)
+
+
 def test_use_skill_loads_body(tmp_path):
     from coding_cli.skills import Skill
 

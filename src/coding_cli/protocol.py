@@ -39,8 +39,12 @@ else, in this exact form:
 Rules:
 - Emit at most one tool call per message. After you see its TOOL_RESULT,
   immediately continue with the next tool call and keep going until the whole
-  task is done. Do not stop to narrate your plan, summarize progress, or ask for
-  permission between steps.
+  task is done.
+- You MAY put ONE short status line (a single sentence) before the tool block to
+  say what you're about to do or what just happened — but always include the tool
+  call in the same message so the work continues. Do not send a message that is
+  only prose mid-task (that ends the turn); put the status line in front of your
+  next tool call instead.
 - The CLI already asks the user to confirm risky actions (writes, edits, shell
   commands), so never ask "should I proceed?" in prose — just make the tool call
   and the user is prompted if needed.
@@ -50,12 +54,13 @@ Rules:
   yourself. Never tell the user to edit a file manually.
 - Include a short one-line "purpose" in plain language saying why you're making
   this call (especially for run_shell, so the user can approve at a glance).
-- Use double-quoted JSON. Do not add commentary around the tool block. If you
-  cannot emit the fence, a bare JSON object on its own is still accepted.
-- Reply in plain text (no tool block) ONLY when the task is fully complete, or
-  when you genuinely cannot continue without a decision from the user. Plain text
-  ends the turn and is shown to the user as the final answer, so do not use it to
-  think out loud mid-task.
+- Use double-quoted JSON for the tool block. Aside from the one optional status
+  line above, keep other commentary out. If you cannot emit the fence, a bare
+  JSON object on its own is still accepted.
+- Reply in plain text with NO tool block ONLY when the task is fully complete, or
+  when you genuinely cannot continue without a decision from the user. Such a
+  message ends the turn and is shown as the final answer — so don't use it to
+  think out loud mid-task; use the short status line before your next tool call.
 
 Available tools:
 - read_file(path): return the contents of a file.
@@ -169,6 +174,18 @@ def parse_tool_call(text: str) -> Optional[ToolCall]:
 def strip_tool_block(text: str) -> str:
     """Remove the tool block from a reply, leaving any surrounding prose."""
     return _TOOL_BLOCK_RE.sub("", text or "").strip()
+
+
+def extract_note(text: str) -> str:
+    """Return the short status prose a model put alongside a fenced tool call.
+
+    Only fenced ```tool blocks are stripped, so a bare-JSON tool call (no fence)
+    yields ``""`` rather than leaking the raw JSON as a "note".
+    """
+    text = text or ""
+    if not _TOOL_BLOCK_RE.search(text):
+        return ""
+    return _TOOL_BLOCK_RE.sub("", text).strip()
 
 
 def format_tool_result(name: str, result: str) -> str:

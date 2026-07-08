@@ -123,6 +123,23 @@ def test_preamble_has_edit_file_recovery_guidance():
     assert "Never tell the user to edit a file manually" in pre
 
 
+def test_preamble_allows_status_line():
+    pre = protocol.build_preamble([])
+    assert "one short status line" in pre.lower()
+
+
+def test_extract_note_returns_prose_around_fenced_block():
+    text = 'Reading the file now.\n```tool\n{"tool": "read_file", "args": {"path": "a"}}\n```'
+    assert protocol.extract_note(text) == "Reading the file now."
+
+
+def test_extract_note_empty_without_fence():
+    # Bare-JSON tool call (no fence) must not leak as a note.
+    assert protocol.extract_note('{"tool": "read_file", "args": {"path": "a"}}') == ""
+    # Plain prose (no tool block) also yields no note.
+    assert protocol.extract_note("just some prose") == ""
+
+
 def test_format_tool_result():
     out = protocol.format_tool_result("read_file", "hello")
     assert out.startswith("TOOL_RESULT[read_file]:")
