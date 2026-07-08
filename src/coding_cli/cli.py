@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import ui
+from . import shell_policy, ui
 from .agent import Agent, build_agent
 from .config import Config, ConfigError
 from .history import ChangeHistory
@@ -21,33 +21,65 @@ def _mode_label(mode: str) -> str:
     return _LABEL_BY_MODE.get(mode, "")
 
 
-def _make_confirm():
+def _prompt_confirm(
+    action: str, detail: str, preview: str, allow_cmd=None
+) -> ConfirmDecision:
+    """Interactive y/n/diff/message prompt. ``allow_cmd`` is ``(command, path)``
+    to also offer an ``[a] always allow`` option (run_shell only)."""
+    ui.warn(f"\n  ⚠  {action}: {detail}")
+    opts = "[y]es / [n]o / "
+    if preview:
+        opts += "[d]iff / "
+    if allow_cmd is not None:
+        opts += "[a]lways allow / "
+    prompt = f"  Proceed? {opts}or type a message: "
+    while True:
+        try:
+            reply = input(prompt).strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return ConfirmDecision(False)
+        low = reply.lower()
+        if low in ("y", "yes"):
+            return ConfirmDecision(True)
+        if low == "d" and preview:
+            ui.diff(preview)
+            continue
+        if low == "a" and allow_cmd is not None:
+            command, path = allow_cmd
+            shell_policy.append_allowlist(path, command)
+            ui.notice(
+                f"  Always-allowed. Edit {path} to adjust (shorten an entry to "
+                "broaden it, or delete it to revoke)."
+            )
+            return ConfirmDecision(True)
+        if low in ("n", "no", ""):
+            return ConfirmDecision(False)
+        # Anything else is a message back to the model (declines + explains).
+        return ConfirmDecision(False, feedback=reply)
+
+
+def _make_confirm(get_workdir):
     """Build the interactive confirmation callback for mutating tools.
 
-    Auto-approval and plan-mode blocking are handled in ``tools._confirm`` by
-    mode, so this callback is only ever consulted when a real prompt is wanted.
+    Auto-approval by mode and plan-mode blocking are handled in
+    ``tools._confirm``; this callback runs when a real prompt is wanted. For
+    run_shell it adds a per-project allowlist and dangerous-command warnings.
     """
 
     def confirm(action: str, detail: str, preview: str = "") -> ConfirmDecision:
-        ui.warn(f"\n  ⚠  {action}: {detail}")
-        diff_opt = "[d]iff / " if preview else ""
-        prompt = f"  Proceed? [y]es / [n]o / {diff_opt}or type a message: "
-        while True:
-            try:
-                reply = input(prompt).strip()
-            except (EOFError, KeyboardInterrupt):
-                print()
-                return ConfirmDecision(False)
-            low = reply.lower()
-            if low in ("y", "yes"):
+        if action == "run_shell":
+            danger = shell_policy.is_dangerous(detail)
+            if danger is not None:
+                ui.error(f"  ⚠  DANGEROUS ({danger}) — review carefully.")
+                # Dangerous commands are never auto-approved or always-allowed.
+                return _prompt_confirm(action, detail, preview, allow_cmd=None)
+            path = shell_policy.allowlist_path(get_workdir())
+            if shell_policy.matches_allowlist(detail, shell_policy.load_allowlist(path)):
+                ui.notice(f"  ↳ auto-allowed (allowlist): {detail}")
                 return ConfirmDecision(True)
-            if low == "d" and preview:
-                ui.diff(preview)
-                continue
-            if low in ("n", "no", ""):
-                return ConfirmDecision(False)
-            # Anything else is a message back to the model (declines + explains).
-            return ConfirmDecision(False, feedback=reply)
+            return _prompt_confirm(action, detail, preview, allow_cmd=(detail, path))
+        return _prompt_confirm(action, detail, preview, allow_cmd=None)
 
     return confirm
 
@@ -236,11 +268,12 @@ def main(argv: list[str] | None = None) -> int:
 
     agent = build_agent(
         config,
-        confirm=_make_confirm(),
         report=_make_reporter(),
         stream=not args.no_stream,
         mode=mode,
     )
+    # Late-bind the confirm callback so its per-project allowlist follows /cd.
+    agent.confirm = _make_confirm(lambda: agent.workdir)
 
     if args.once:
         return _run_once(agent, args.once)

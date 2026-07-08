@@ -143,6 +143,23 @@ exact diff (for writes/edits), or **type a message** instead — that declines t
 call *and* sends your words back to the model (e.g. "use uv instead, not pip"),
 so it can adjust rather than just stop.
 
+**Always-allow a shell command.** For `run_shell`, the prompt also offers
+`[a] always allow`. Choosing it records the command in a per-project allowlist at
+`<workdir>/.coding_cli/allowed_commands.txt` (gitignored, and off-limits to the
+agent), and matching commands then run without prompting. Matching is
+prefix-based: an entry `git status` also covers `git status --porcelain`, but any
+command containing `&&`, `;`, `|`, or redirection always re-prompts — so a
+dangerous command can't be tacked onto an allowed prefix. The file is plain text
+(one command/prefix per line, `#` comments allowed) and is **meant to be
+hand-edited**: `[a]` saves the full command, so shorten an entry to broaden it, or
+delete a line to revoke. Edits take effect on the next command.
+
+**Dangerous-command warning.** Commands matching a small heuristic list
+(`rm -rf`, `sudo`, `mkfs`, `dd of=/dev/…`, `git push --force`, `curl … | sh`,
+`shutdown`, …) show a red `DANGEROUS` warning, are never auto-approved from the
+allowlist, and are not offered `[a]` — you must confirm them explicitly each time.
+This is a best-effort safety net, not a security boundary.
+
 ### Permission modes
 
 - **default** — confirm every file edit and shell command before it runs.
