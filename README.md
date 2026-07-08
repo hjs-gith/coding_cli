@@ -301,6 +301,34 @@ Step-by-step instructions the model follows when this skill is invoked...
 See [`skills/commit-helper/SKILL.md`](skills/commit-helper/SKILL.md) for a complete
 example. You can also place machine-wide skills in `~/.config/coding-cli/skills/`.
 
+### Skills with scripts
+
+A skill folder can bundle helper scripts (e.g. `run.py`) alongside its
+`SKILL.md`. When the model calls `use_skill("<name>")`, the loader appends the
+skill's **absolute directory** and a listing of its **bundled file paths**, so
+the model can run a script by full path with `run_shell` (`python
+.../skills/<name>/run.py`) no matter where the skill lives. Reference the script
+in the `SKILL.md` body so the model knows to use it.
+
+Two caveats to be aware of:
+
+- **Script dependencies are yours to install.** A skill script runs via
+  `run_shell` in whatever environment the shell resolves — coding-cli does not
+  inspect or install its imports. If `run.py` needs a third-party package, make
+  sure it's installed in that environment (e.g. `pip install …`), or have the
+  skill install it as a first step.
+- **Bundled skills vs. wheel installs.** Skills you add under `./skills/`
+  (project) or `~/.config/coding-cli/skills/` are found on the live filesystem at
+  runtime and always work. The repo's **built-in** `skills/` folder, however, is
+  located relative to the source tree (`skills.py` looks two levels up from the
+  package), so it only resolves for an **editable** install (`pip install -e`,
+  the documented setup). A non-editable/wheel install may not ship those bundled
+  skills — the `../../skills/**/*` `package-data` entry in `pyproject.toml`
+  reaches outside the package and setuptools does not reliably honor it. If you
+  package coding-cli as a wheel and want the built-in skills, move `skills/` under
+  the package (or use a proper data-inclusion mechanism) and adjust
+  `skill_search_dirs` accordingly.
+
 ## Develop
 
 Run the test suite (26 unit tests covering the protocol, tools, skills, and the
