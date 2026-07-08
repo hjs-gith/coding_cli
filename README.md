@@ -143,6 +143,23 @@ exact diff (for writes/edits), or **type a message** instead — that declines t
 call *and* sends your words back to the model (e.g. "use uv instead, not pip"),
 so it can adjust rather than just stop.
 
+**Always-allow a shell command.** For `run_shell`, the prompt also offers
+`[a] always allow`. Choosing it records the command in a per-project allowlist at
+`<workdir>/.coding_cli/allowed_commands.txt` (gitignored, and off-limits to the
+agent), and matching commands then run without prompting. Matching is
+prefix-based: an entry `git status` also covers `git status --porcelain`, but any
+command containing `&&`, `;`, `|`, or redirection always re-prompts — so a
+dangerous command can't be tacked onto an allowed prefix. The file is plain text
+(one command/prefix per line, `#` comments allowed) and is **meant to be
+hand-edited**: `[a]` saves the full command, so shorten an entry to broaden it, or
+delete a line to revoke. Edits take effect on the next command.
+
+**Dangerous-command warning.** Commands matching a small heuristic list
+(`rm -rf`, `sudo`, `mkfs`, `dd of=/dev/…`, `git push --force`, `curl … | sh`,
+`shutdown`, …) show a red `DANGEROUS` warning, are never auto-approved from the
+allowlist, and are not offered `[a]` — you must confirm them explicitly each time.
+This is a best-effort safety net, not a security boundary.
+
 ### Permission modes
 
 - **default** — confirm every file edit and shell command before it runs.
@@ -300,6 +317,34 @@ Step-by-step instructions the model follows when this skill is invoked...
 
 See [`skills/commit-helper/SKILL.md`](skills/commit-helper/SKILL.md) for a complete
 example. You can also place machine-wide skills in `~/.config/coding-cli/skills/`.
+
+### Skills with scripts
+
+A skill folder can bundle helper scripts (e.g. `run.py`) alongside its
+`SKILL.md`. When the model calls `use_skill("<name>")`, the loader appends the
+skill's **absolute directory** and a listing of its **bundled file paths**, so
+the model can run a script by full path with `run_shell` (`python
+.../skills/<name>/run.py`) no matter where the skill lives. Reference the script
+in the `SKILL.md` body so the model knows to use it.
+
+Two caveats to be aware of:
+
+- **Script dependencies are yours to install.** A skill script runs via
+  `run_shell` in whatever environment the shell resolves — coding-cli does not
+  inspect or install its imports. If `run.py` needs a third-party package, make
+  sure it's installed in that environment (e.g. `pip install …`), or have the
+  skill install it as a first step.
+- **Bundled skills vs. wheel installs.** Skills you add under `./skills/`
+  (project) or `~/.config/coding-cli/skills/` are found on the live filesystem at
+  runtime and always work. The repo's **built-in** `skills/` folder, however, is
+  located relative to the source tree (`skills.py` looks two levels up from the
+  package), so it only resolves for an **editable** install (`pip install -e`,
+  the documented setup). A non-editable/wheel install may not ship those bundled
+  skills — the `../../skills/**/*` `package-data` entry in `pyproject.toml`
+  reaches outside the package and setuptools does not reliably honor it. If you
+  package coding-cli as a wheel and want the built-in skills, move `skills/` under
+  the package (or use a proper data-inclusion mechanism) and adjust
+  `skill_search_dirs` accordingly.
 
 ## Develop
 
