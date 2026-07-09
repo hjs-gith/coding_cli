@@ -14,6 +14,7 @@ from typing import Optional
 try:
     from rich.box import Box
     from rich.console import Console
+    from rich.live import Live
     from rich.markdown import Markdown
     from rich.panel import Panel
     from rich.text import Text
@@ -118,6 +119,16 @@ def prompt(label: str = "") -> str:
     return input(f"\nyou{tag} › ")
 
 
+def _answer_panel(text: str):
+    """The green-gutter Markdown panel used for assistant answers (rich only)."""
+    return Panel(
+        Markdown(text or ""),
+        box=_BAR_BOX,
+        border_style="assistant",
+        padding=(0, 1),
+    )
+
+
 def assistant(text: str) -> None:
     """Render the assistant's reply: a green gutter bar + Markdown body."""
     if _console is None:
@@ -126,14 +137,55 @@ def assistant(text: str) -> None:
         return
     _console.print()
     _console.print("[assistant]" + BAR + " assistant[/]")
-    _console.print(
-        Panel(
-            Markdown(text or ""),
-            box=_BAR_BOX,
-            border_style="assistant",
-            padding=(0, 1),
+    _console.print(_answer_panel(text))
+
+
+class ConsoleSink:
+    """Live-updating sink for streamed assistant output.
+
+    ``begin/delta/end`` stream text into a ``rich.live.Live`` region that
+    re-renders the accumulating Markdown in the green panel; ``answer`` renders a
+    complete reply in one shot (the non-streaming path). Degrades to flushed
+    plain-text deltas when rich is absent or ``NO_COLOR`` is set.
+    """
+
+    def __init__(self) -> None:
+        self._live = None
+        self._buf = ""
+
+    def begin(self) -> None:
+        self._buf = ""
+        if _console is None:
+            print()
+            print(f"{BAR} assistant")
+            return
+        _console.print()
+        _console.print("[assistant]" + BAR + " assistant[/]")
+        self._live = Live(
+            _answer_panel(""),
+            console=_console,
+            refresh_per_second=12,
+            vertical_overflow="visible",
         )
-    )
+        self._live.start()
+
+    def delta(self, text: str) -> None:
+        self._buf += text
+        if self._live is not None:
+            self._live.update(_answer_panel(self._buf))
+        else:
+            print(text, end="", flush=True)
+
+    def end(self) -> None:
+        if self._live is not None:
+            self._live.update(_answer_panel(self._buf))
+            self._live.stop()
+            self._live = None
+        else:
+            print()
+
+    def answer(self, text: str) -> None:
+        assistant(text)
 
 
 def tool(detail: str) -> None:

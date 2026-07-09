@@ -50,14 +50,15 @@ class DifyClient:
 
     # -- public API ----------------------------------------------------------
 
-    def chat(self, query: str, stream: bool = True) -> ChatResult:
+    def chat(self, query: str, stream: bool = True, on_delta=None) -> ChatResult:
         """Send ``query`` and return the model's answer.
 
         Updates ``self.conversation_id`` from the response so subsequent calls
-        continue the same conversation.
+        continue the same conversation. When streaming, ``on_delta`` (if given)
+        is called with each incremental piece of answer text as it arrives.
         """
         if stream:
-            return self._chat_streaming(query)
+            return self._chat_streaming(query, on_delta)
         return self._chat_blocking(query)
 
     # -- internals -----------------------------------------------------------
@@ -107,7 +108,7 @@ class DifyClient:
             self.conversation_id = result.conversation_id
         return result
 
-    def _chat_streaming(self, query: str) -> ChatResult:
+    def _chat_streaming(self, query: str, on_delta=None) -> ChatResult:
         try:
             resp = self._session.post(
                 self._url,
@@ -136,7 +137,10 @@ class DifyClient:
                 continue
             etype = event.get("event")
             if etype in ("message", "agent_message"):
-                answer_parts.append(event.get("answer", ""))
+                delta = event.get("answer", "")
+                answer_parts.append(delta)
+                if on_delta is not None and delta:
+                    on_delta(delta)
             elif etype == "error":
                 raise DifyError(
                     f"Dify stream error: {event.get('message') or event}"

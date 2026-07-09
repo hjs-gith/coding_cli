@@ -20,6 +20,60 @@ ReporterFn = Callable[[str, str], None]
 # from flooding the screen mid-loop).
 MAX_NOTE_CHARS = 600
 
+# The fenced tool-call sentinel; streamed text from here on is suppressed so the
+# user never sees the raw tool JSON.
+_STREAM_SENTINEL = "```tool"
+
+
+class StreamEmitter:
+    """Feeds streamed prose to a sink, suppressing the ```tool block.
+
+    Prose that precedes a fenced tool call (a status note) and prose-only final
+    answers are emitted live; everything from the ```tool fence onward is hidden.
+    """
+
+    def __init__(self, sink) -> None:
+        self._sink = sink
+        self._buf = ""
+        self._suppress = False
+        self._began = False
+
+    def feed(self, delta: str) -> None:
+        if self._suppress or not delta:
+            return
+        self._buf += delta
+        idx = self._buf.find(_STREAM_SENTINEL)
+        if idx != -1:
+            self._emit(self._buf[:idx])
+            self._buf = ""
+            self._suppress = True
+            return
+        # Hold back the longest tail that could be the start of the sentinel, so
+        # a partial "``" isn't emitted before we know it's ```tool.
+        keep = 0
+        for k in range(min(len(self._buf), len(_STREAM_SENTINEL) - 1), 0, -1):
+            if _STREAM_SENTINEL.startswith(self._buf[-k:]):
+                keep = k
+                break
+        if keep < len(self._buf):
+            self._emit(self._buf[: len(self._buf) - keep])
+            self._buf = self._buf[len(self._buf) - keep :]
+
+    def finish(self) -> None:
+        if not self._suppress and self._buf:
+            self._emit(self._buf)
+            self._buf = ""
+        if self._began:
+            self._sink.end()
+
+    def _emit(self, text: str) -> None:
+        if not text:
+            return
+        if not self._began:
+            self._sink.begin()
+            self._began = True
+        self._sink.delta(text)
+
 # Prepended to user input in plan mode so the model plans instead of acting.
 PLAN_HINT = (
     "[PLAN MODE — do not edit files or run shell commands. Use read-only tools to "
@@ -49,6 +103,7 @@ class Agent:
     stream: bool = True
     deny: tuple[str, ...] = ()
     mode: str = tools.MODE_DEFAULT
+    sink: Optional[object] = None  # live-output sink (begin/delta/end/answer)
     _preamble_sent: bool = False
     _exit_plan_pending: bool = False
 
@@ -133,24 +188,39 @@ class Agent:
 
         ctx = self._tool_context()
         for _ in range(self.max_tool_iters):
-            result = self.client.chat(query, stream=self.stream)
+            streaming = self.sink is not None and self.stream
+            emitter = StreamEmitter(self.sink) if streaming else None
+            result = self.client.chat(
+                query,
+                stream=self.stream,
+                on_delta=emitter.feed if emitter is not None else None,
+            )
+            if emitter is not None:
+                emitter.finish()
             call = protocol.parse_tool_call(result.answer)
             if call is None:
                 # No tool block -> this is the final answer.
+                if self.sink is not None and not streaming:
+                    self.sink.answer(result.answer.strip())
                 return result.answer.strip()
 
-            note = protocol.extract_note(result.answer)
-            if note and self.report is not None:
-                self.report("note", note[:MAX_NOTE_CHARS])
+            if not streaming:
+                # Streaming already showed any leading note prose live.
+                note = protocol.extract_note(result.answer)
+                if note and self.report is not None:
+                    self.report("note", note[:MAX_NOTE_CHARS])
             self._announce(call)
             output = tools.execute(ctx, call.name, call.args)
             self._announce_result(call.name, output)
             query = protocol.format_tool_result(call.name, output)
 
-        return (
+        stopped = (
             "Stopped: reached the maximum of "
             f"{self.max_tool_iters} tool steps without a final answer."
         )
+        if self.sink is not None:
+            self.sink.answer(stopped)
+        return stopped
 
     def _announce(self, call: protocol.ToolCall) -> None:
         if self.report is None:
@@ -184,6 +254,7 @@ def build_agent(
     report: Optional[ReporterFn] = None,
     stream: bool = True,
     mode: str = tools.MODE_DEFAULT,
+    sink: Optional[object] = None,
 ) -> Agent:
     """Construct an Agent from a loaded Config, discovering skills."""
     client = DifyClient(
@@ -203,4 +274,5 @@ def build_agent(
         stream=stream,
         deny=config.deny,
         mode=mode,
+        sink=sink,
     )

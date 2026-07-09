@@ -100,11 +100,10 @@ def _make_reporter():
 
 def _run_once(agent: Agent, prompt: str) -> int:
     try:
-        answer = agent.run_turn(prompt)
+        agent.run_turn(prompt)  # the agent renders the answer via its sink
     except Exception as exc:  # surface backend/tool errors cleanly
         ui.error(f"Error: {exc}")
         return 1
-    ui.assistant(answer)
     return 0
 
 
@@ -130,8 +129,7 @@ def _repl(agent: Agent) -> int:
                 return 0
             continue
         try:
-            answer = agent.run_turn(line)
-            ui.assistant(answer)
+            agent.run_turn(line)  # the agent renders the answer via its sink
             if agent.mode == MODE_PLAN:
                 _handle_plan_approval(agent)
         except KeyboardInterrupt:
@@ -163,8 +161,7 @@ def _handle_plan_approval(agent: Agent) -> None:
             return
         ui.warn("  Please answer a, c, or n.")
     ui.notice(f"Plan approved — implementing (mode: {agent.mode}).")
-    answer = agent.run_turn("The plan is approved. Implement it now.")
-    ui.assistant(answer)
+    agent.run_turn("The plan is approved. Implement it now.")  # rendered via sink
 
 
 def _handle_command(agent: Agent, line: str) -> bool:
@@ -273,6 +270,7 @@ def main(argv: list[str] | None = None) -> int:
         report=_make_reporter(),
         stream=not args.no_stream,
         mode=mode,
+        sink=ui.ConsoleSink(),
     )
     # Late-bind the confirm callback so its per-project allowlist follows /cd.
     agent.confirm = _make_confirm(lambda: agent.workdir)

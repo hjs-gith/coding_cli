@@ -15,13 +15,42 @@ class FakeClient:
         self.queries = []
         self.conversation_id = ""
 
-    def chat(self, query, stream=True):
+    def chat(self, query, stream=True, on_delta=None):
         self.queries.append(query)
         answer = self._responses.pop(0)
+        if on_delta is not None and stream:
+            # Simulate streaming by delivering the whole answer as one delta.
+            on_delta(answer)
         return ChatResult(answer=answer, conversation_id="conv-1", message_id="m")
 
     def reset(self):
         self.conversation_id = ""
+
+
+class FakeSink:
+    """Records what the agent would render live."""
+
+    def __init__(self):
+        self.deltas = []
+        self.answers = []
+        self.began = 0
+        self.ended = 0
+
+    def begin(self):
+        self.began += 1
+
+    def delta(self, text):
+        self.deltas.append(text)
+
+    def end(self):
+        self.ended += 1
+
+    def answer(self, text):
+        self.answers.append(text)
+
+    @property
+    def streamed(self):
+        return "".join(self.deltas)
 
 
 def make_agent(tmp_path, responses, **kw):
@@ -237,6 +266,82 @@ def test_bare_json_tool_call_emits_no_note(tmp_path):
     agent = make_agent(tmp_path, responses, report=lambda e, d: events.append((e, d)))
     agent.run_turn("go")
     assert not any(e == "note" for e, _ in events)
+
+
+def _run_emitter(deltas):
+    from coding_cli.agent import StreamEmitter
+
+    sink = FakeSink()
+    em = StreamEmitter(sink)
+    for d in deltas:
+        em.feed(d)
+    em.finish()
+    return sink
+
+
+def test_stream_emitter_streams_plain_answer():
+    sink = _run_emitter(["Hello ", "world", ", done."])
+    assert sink.streamed == "Hello world, done."
+
+
+def test_stream_emitter_suppresses_tool_block():
+    sink = _run_emitter([
+        "Reading the file now.\n",
+        '```tool\n{"tool": "read_file", "args": {"path": "a"}}\n```',
+    ])
+    assert sink.streamed == "Reading the file now.\n"
+    assert "tool" not in "".join(sink.deltas).split("\n")[-1]  # no JSON
+    assert "read_file" not in sink.streamed
+
+
+def test_stream_emitter_sentinel_split_across_deltas():
+    # The fence arrives one/two chars at a time; must still be caught.
+    sink = _run_emitter(["note ", "`", "`", "`", "tool\n{}", "```"])
+    assert sink.streamed == "note "
+
+
+def test_stream_emitter_keeps_python_fence():
+    sink = _run_emitter(["Here:\n", "```python\n", "x = 1\n", "```\n"])
+    assert "```python" in sink.streamed
+    assert "x = 1" in sink.streamed
+
+
+def test_streaming_shows_note_and_answer_not_tool_json(tmp_path):
+    (tmp_path / "a.txt").write_text("data")
+    responses = [
+        'Checking the file.\n```tool\n{"tool": "read_file", "args": {"path": "a.txt"}}\n```',
+        "All good — the file has data.",
+    ]
+    sink = FakeSink()
+    events = []
+    agent = make_agent(
+        tmp_path, responses, sink=sink, stream=True,
+        report=lambda e, d: events.append((e, d)),
+    )
+    agent.run_turn("look")
+    assert "Checking the file." in sink.streamed
+    assert "All good — the file has data." in sink.streamed
+    assert "read_file" not in sink.streamed  # tool JSON never streamed
+    # In streaming mode the note is streamed, not sent through report().
+    assert not any(e == "note" for e, _ in events)
+
+
+def test_non_streaming_uses_answer_and_note(tmp_path):
+    (tmp_path / "a.txt").write_text("data")
+    responses = [
+        'Checking.\n```tool\n{"tool": "read_file", "args": {"path": "a.txt"}}\n```',
+        "Done.",
+    ]
+    sink = FakeSink()
+    events = []
+    agent = make_agent(
+        tmp_path, responses, sink=sink, stream=False,
+        report=lambda e, d: events.append((e, d)),
+    )
+    agent.run_turn("look")
+    assert sink.deltas == []          # nothing streamed
+    assert sink.answers == ["Done."]  # final answer rendered in one shot
+    assert ("note", "Checking.") in events
 
 
 def test_use_skill_loads_body(tmp_path):
