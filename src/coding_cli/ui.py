@@ -53,16 +53,42 @@ if _HAVE_RICH:
 
 _console: "Optional[Console]" = None
 PLAIN = True
+# Whether streamed output uses the live-updating rich Markdown panel. When False,
+# streaming falls back to append-only plain text (which never duplicates).
+_LIVE_STREAM = False
 
 
 def configure(force_plain: bool = False) -> None:
     """(Re)initialize the console. ``NO_COLOR`` or missing rich force plain mode."""
-    global _console, PLAIN
+    global _console, PLAIN, _LIVE_STREAM
     PLAIN = force_plain or (not _HAVE_RICH) or bool(os.environ.get("NO_COLOR"))
     if PLAIN:
         _console = None
     else:
         _console = Console(theme=Theme(_THEME_STYLES))
+    _LIVE_STREAM = _resolve_live_stream()
+
+
+def _resolve_live_stream() -> bool:
+    """Decide whether the live Markdown panel is safe for streaming.
+
+    ``rich.Live`` needs in-place cursor control, which fails on the legacy Windows
+    console (``legacy_windows``) and non-interactive/dumb terminals — there we use
+    append-only plain streaming instead. ``CODING_CLI_STREAM`` overrides: ``live``
+    forces the panel, ``plain`` forces append-only, ``auto`` (default) uses the
+    detected capability.
+    """
+    mode = os.environ.get("CODING_CLI_STREAM", "auto").strip().lower()
+    if mode == "plain" or _console is None:
+        return False
+    capable = (
+        _console.is_terminal
+        and not _console.is_dumb_terminal
+        and not _console.legacy_windows
+    )
+    if mode == "live":
+        return _console is not None  # force on wherever rich is active
+    return capable  # auto
 
 
 configure()
@@ -141,12 +167,14 @@ def assistant(text: str) -> None:
 
 
 class ConsoleSink:
-    """Live-updating sink for streamed assistant output.
+    """Sink for streamed assistant output.
 
-    ``begin/delta/end`` stream text into a ``rich.live.Live`` region that
-    re-renders the accumulating Markdown in the green panel; ``answer`` renders a
-    complete reply in one shot (the non-streaming path). Degrades to flushed
-    plain-text deltas when rich is absent or ``NO_COLOR`` is set.
+    When the terminal supports it (``_LIVE_STREAM``), ``begin/delta/end`` stream
+    into a ``rich.live.Live`` region that re-renders the accumulating Markdown in
+    the green panel. Otherwise — legacy Windows console, non-TTY, ``NO_COLOR``, no
+    rich, or ``CODING_CLI_STREAM=plain`` — it falls back to **append-only** plain
+    text (each new chunk printed once, so nothing can ever duplicate). ``answer``
+    renders a complete reply in one shot (the non-streaming path).
     """
 
     def __init__(self) -> None:
@@ -161,19 +189,16 @@ class ConsoleSink:
             return
         _console.print()
         _console.print("[assistant]" + BAR + " assistant[/]")
-        self._live = Live(
-            _answer_panel(""),
-            console=_console,
-            refresh_per_second=12,
-            vertical_overflow="visible",
-        )
-        self._live.start()
+        if _LIVE_STREAM:
+            self._live = Live(_answer_panel(""), console=_console, refresh_per_second=12)
+            self._live.start()
 
     def delta(self, text: str) -> None:
         self._buf += text
         if self._live is not None:
             self._live.update(_answer_panel(self._buf))
         else:
+            # Append-only: print just the new chunk (never re-draw the buffer).
             print(text, end="", flush=True)
 
     def end(self) -> None:

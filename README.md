@@ -205,12 +205,18 @@ behind a green left gutter bar. Set `NO_COLOR=1`, or install without the `rich`
 extra, to get plain text with simple `▎` gutters and no escape codes.
 
 **Streaming.** By default the assistant's text streams **live** as it arrives —
-it reflows as formatted Markdown in the green panel while the model types, so you
-don't wait for the whole block. The raw ` ```tool ` call is never shown; only the
-`→`/`✓` tool lines and any short status prose appear. `--no-stream` switches to a
-one-shot buffered render instead (and is the more robust transport for very long
-single replies). Without `rich`/with `NO_COLOR`, streaming falls back to plain
-flushed text.
+on a capable terminal (macOS/Linux, or **Windows Terminal**) it reflows as
+formatted Markdown in the green panel while the model types. The raw ` ```tool `
+call is never shown; only the `→`/`✓` tool lines and any short status prose
+appear. `--no-stream` switches to a one-shot buffered render instead (the more
+robust transport for very long single replies).
+
+The live Markdown panel needs a terminal that supports in-place cursor updates.
+On the **legacy Windows console** (old `conhost`), non-interactive output, or with
+`NO_COLOR`/without `rich`, streaming automatically falls back to **append-only
+plain text** (each chunk printed once — no duplication). Override with
+`CODING_CLI_STREAM`: `auto` (default, detect), `live` (force the Markdown panel),
+or `plain` (force append-only plain streaming).
 
 ### Reviewing and undoing changes
 
