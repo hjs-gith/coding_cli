@@ -228,7 +228,7 @@ change even in a later session.
 
 ### Protected paths
 
-The agent's file tools (`read_file`, `list_dir`, `write_file`, `edit_file`) refuse
+The agent's file tools (`read_file`, `search_text`, `list_dir`, `write_file`, `edit_file`) refuse
 to touch a denylist of workdir-relative paths, and those paths are hidden from
 `list_dir`. The `.coding_cli/` snapshot directory is **always** reserved (so the
 model can't corrupt your undo history); on top of that, `CODING_CLI_DENY`
@@ -362,7 +362,7 @@ Two caveats to be aware of:
 
 ## Develop
 
-Run the test suite (26 unit tests covering the protocol, tools, skills, and the
+Run the test suite (124 unit tests covering the protocol, tools, skills, and the
 agent loop with a mocked Dify client — no network required):
 
 ```bash
@@ -376,7 +376,7 @@ uv run pytest          # or: .venv/bin/pytest
 | `config.py` | Load `.env` / env settings |
 | `dify_client.py` | Dify chat-messages wrapper (streaming + blocking) |
 | `protocol.py` | Tool-call preamble + parse/format |
-| `tools.py` | `read_file`, `list_dir`, `write_file`, `edit_file`, `run_shell`, `use_skill` |
+| `tools.py` | `read_file` (whole or line-range), `search_text` (regex grep), `list_dir`, `write_file`, `edit_file`, `run_shell`, `use_skill` |
 | `skills.py` | Discover/parse Markdown skills, load on demand |
 | `agent.py` | The ReAct loop |
 | `cli.py` | REPL, argument parsing, confirmations, rendering |

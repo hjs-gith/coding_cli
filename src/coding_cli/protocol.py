@@ -16,6 +16,7 @@ from typing import Iterable, Optional
 # advertised so the skills catalog is meaningful.
 KNOWN_TOOLS = {
     "read_file",
+    "search_text",
     "list_dir",
     "write_file",
     "edit_file",
@@ -63,7 +64,14 @@ Rules:
   think out loud mid-task; use the short status line before your next tool call.
 
 Available tools:
-- read_file(path): return the contents of a file.
+- read_file(path, offset, limit): return a file's contents. Pass offset (1-based
+  line) and/or limit (line count) to read only a range of a large file and page
+  through it instead of reading the whole thing.
+- search_text(pattern, path, glob, ignore_case): regex-search files under path
+  (a file or directory, default the workdir) and return matching "path:line:
+  text". Use this to locate code in large files or across the repo instead of
+  reading files whole. glob filters by path (e.g. "*.py"); ignore_case for a
+  case-insensitive match.
 - list_dir(path): list entries in a directory.
 - write_file(path, content): create or overwrite a file.
 - edit_file(path, old, new): replace an exact unique substring in a file. `old`

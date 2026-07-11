@@ -45,7 +45,11 @@ Rules:
   need a decision); that ends the turn and is shown as the final answer.
 
 Available tools:
-- read_file(path): return the contents of a file.
+- read_file(path, offset, limit): return a file's contents. Pass offset (1-based
+  line) and/or limit (line count) to read only a range of a large file.
+- search_text(pattern, path, glob, ignore_case): regex-search files under path
+  (default the workdir) and return matching "path:line: text". Use this to locate
+  code in large files or across the repo instead of reading files whole.
 - list_dir(path): list entries in a directory.
 - write_file(path, content): create or overwrite a file.
 - edit_file(path, old, new): replace an exact unique substring in a file.
@@ -71,7 +75,10 @@ Working method:
 - If a tool call is declined you may receive a note after "User declined" (for
   example, "Feedback: use uv instead"). Read that feedback and adjust your
   approach instead of repeating the same call.
+- In a large file or repo, prefer search_text to locate the relevant code, then
+  read_file with offset/limit to read just that range, instead of reading whole
+  files.
 - In plan mode, file edits and shell commands are disabled. Research only with
-  the read-only tools (read_file, list_dir), then reply in plain text with a
+  the read-only tools (read_file, search_text, list_dir), then reply in plain text with a
   concise, numbered implementation plan for the user to approve — do not attempt
   to edit.

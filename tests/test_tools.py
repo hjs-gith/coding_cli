@@ -178,6 +178,109 @@ def test_denylist_does_not_block_unlisted_paths(tmp_path):
     assert out == "hello"
 
 
+# --- ranged read_file -------------------------------------------------------
+
+def test_read_file_whole_still_raw(tmp_path):
+    # Backward compat: no offset/limit returns exact raw content, no footer.
+    (tmp_path / "a.txt").write_text("l1\nl2\nl3")
+    out = tools.execute(ctx(tmp_path), "read_file", {"path": "a.txt"})
+    assert out == "l1\nl2\nl3"
+
+
+def test_read_file_offset_limit(tmp_path):
+    (tmp_path / "a.txt").write_text("\n".join(f"line{n}" for n in range(1, 11)))
+    out = tools.execute(ctx(tmp_path), "read_file", {"path": "a.txt", "offset": 3, "limit": 2})
+    assert out == "line3\nline4\n[lines 3-4 of 10]"
+
+
+def test_read_file_offset_to_end(tmp_path):
+    (tmp_path / "a.txt").write_text("a\nb\nc")
+    out = tools.execute(ctx(tmp_path), "read_file", {"path": "a.txt", "offset": 2})
+    assert out == "b\nc\n[lines 2-3 of 3]"
+
+
+def test_read_file_offset_past_end(tmp_path):
+    (tmp_path / "a.txt").write_text("a\nb")
+    out = tools.execute(ctx(tmp_path), "read_file", {"path": "a.txt", "offset": 9})
+    assert "past end" in out and "2 lines" in out
+
+
+def test_read_file_bad_offset(tmp_path):
+    (tmp_path / "a.txt").write_text("a\nb")
+    out = tools.execute(ctx(tmp_path), "read_file", {"path": "a.txt", "offset": 0})
+    assert out.startswith("ERROR")
+
+
+# --- search_text ------------------------------------------------------------
+
+def test_search_text_finds_matches(tmp_path):
+    (tmp_path / "a.py").write_text("def foo():\n    return 1\n")
+    (tmp_path / "b.py").write_text("x = 2\n")
+    sub = tmp_path / "pkg"
+    sub.mkdir()
+    (sub / "c.py").write_text("def foo_bar():\n    pass\n")
+    out = tools.execute(ctx(tmp_path), "search_text", {"pattern": r"def foo"})
+    assert "a.py:1: def foo():" in out
+    assert "pkg/c.py:1: def foo_bar():" in out
+    assert "b.py" not in out
+
+
+def test_search_text_no_match(tmp_path):
+    (tmp_path / "a.py").write_text("hello\n")
+    out = tools.execute(ctx(tmp_path), "search_text", {"pattern": "zzz"})
+    assert "No matches" in out
+
+
+def test_search_text_ignore_case(tmp_path):
+    (tmp_path / "a.txt").write_text("Hello World\n")
+    miss = tools.execute(ctx(tmp_path), "search_text", {"pattern": "hello world"})
+    assert "No matches" in miss
+    hit = tools.execute(
+        ctx(tmp_path), "search_text", {"pattern": "hello world", "ignore_case": True}
+    )
+    assert "a.txt:1:" in hit
+
+
+def test_search_text_glob_filter(tmp_path):
+    (tmp_path / "a.py").write_text("TODO here\n")
+    (tmp_path / "a.md").write_text("TODO there\n")
+    out = tools.execute(ctx(tmp_path), "search_text", {"pattern": "TODO", "glob": "*.py"})
+    assert "a.py:1:" in out
+    assert "a.md" not in out
+
+
+def test_search_text_invalid_regex(tmp_path):
+    (tmp_path / "a.txt").write_text("x\n")
+    out = tools.execute(ctx(tmp_path), "search_text", {"pattern": "("})
+    assert out.startswith("ERROR")
+    assert "Invalid regex" in out
+
+
+def test_search_text_skips_reserved_and_denied(tmp_path):
+    (tmp_path / "keep.txt").write_text("SECRET token\n")
+    (tmp_path / ".env").write_text("SECRET token\n")
+    gitdir = tmp_path / ".git"
+    gitdir.mkdir()
+    (gitdir / "config").write_text("SECRET token\n")
+    out = tools.execute(deny_ctx(tmp_path, [".env"]), "search_text", {"pattern": "SECRET"})
+    assert "keep.txt:1:" in out
+    assert ".env" not in out
+    assert ".git" not in out
+
+
+def test_search_text_skips_binary(tmp_path):
+    (tmp_path / "ok.txt").write_text("match me\n")
+    (tmp_path / "blob.bin").write_bytes(b"\xff\xfe\x00match\x00")
+    out = tools.execute(ctx(tmp_path), "search_text", {"pattern": "match"})
+    assert "ok.txt:1:" in out
+    assert "blob.bin" not in out
+
+
+def test_search_text_rejects_escape(tmp_path):
+    out = tools.execute(ctx(tmp_path), "search_text", {"pattern": "x", "path": "../.."})
+    assert out.startswith("ERROR")
+
+
 def test_run_shell(tmp_path):
     out = tools.execute(ctx(tmp_path), "run_shell", {"command": "echo hi"})
     assert "exit code: 0" in out

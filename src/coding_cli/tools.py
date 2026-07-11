@@ -8,6 +8,9 @@ callback so the CLI can ask the user before anything touches disk.
 from __future__ import annotations
 
 import difflib
+import fnmatch
+import os
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +24,12 @@ if TYPE_CHECKING:
 MAX_OUTPUT_CHARS = 20_000
 SHELL_TIMEOUT_SECONDS = 120
 MAX_DIFF_LINES = 120
+
+# search_text limits: cap matches, skip huge files, and prune noise directories.
+SEARCH_MAX_RESULTS = 100
+SEARCH_MAX_FILE_BYTES = 1_000_000
+SEARCH_MAX_LINE_CHARS = 300
+_SEARCH_SKIP_DIRS = {".git", "node_modules", "__pycache__"}
 
 # Permission modes governing whether mutating tools run, ask, or are blocked.
 MODE_DEFAULT = "default"      # confirm every mutating tool
@@ -142,14 +151,129 @@ def _make_diff(path: str, before: str, after: str) -> str:
 
 # --- individual tools -------------------------------------------------------
 
-def read_file(ctx: ToolContext, path: str) -> str:
+def read_file(
+    ctx: ToolContext,
+    path: str,
+    offset: Optional[int] = None,
+    limit: Optional[int] = None,
+) -> str:
+    """Return a file's contents, optionally just a line range.
+
+    With no ``offset``/``limit`` the whole file is returned (truncated at
+    ``MAX_OUTPUT_CHARS``). Pass ``offset`` (1-based line number) and/or ``limit``
+    (line count) to read only a window of a large file and page through it. Ranged
+    output keeps the raw lines (no line-number prefixes, so it stays safe to feed
+    straight into ``edit_file``) and adds a ``[lines X-Y of N]`` footer.
+    """
     target = _resolve(ctx, path)
     if not target.is_file():
         raise ToolError(f"No such file: {path}")
     try:
-        return _truncate(target.read_text(encoding="utf-8", errors="replace"))
+        text = target.read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
         raise ToolError(f"Could not read {path}: {exc}")
+
+    if offset is None and limit is None:
+        out = _truncate(text)
+        if len(text) > MAX_OUTPUT_CHARS:
+            out += (
+                "\n[truncated; call read_file with offset (1-based line) and "
+                "limit to read specific line ranges]"
+            )
+        return out
+
+    start = 1 if offset is None else int(offset)
+    if start < 1:
+        raise ToolError("offset must be a 1-based line number >= 1.")
+    if limit is not None and int(limit) < 1:
+        raise ToolError("limit must be >= 1.")
+    lines = text.splitlines()
+    total = len(lines)
+    if start > total:
+        return f"[file has {total} lines; offset {start} is past end]"
+    count = total - (start - 1) if limit is None else int(limit)
+    chunk = lines[start - 1 : start - 1 + count]
+    end = start + len(chunk) - 1
+    return _truncate("\n".join(chunk)) + f"\n[lines {start}-{end} of {total}]"
+
+
+def search_text(
+    ctx: ToolContext,
+    pattern: str,
+    path: str = ".",
+    glob: Optional[str] = None,
+    ignore_case: bool = False,
+) -> str:
+    """Regex-search files under ``path`` and return matching ``path:line: text``.
+
+    Read-only. ``pattern`` is a Python regex; ``path`` may be a file or directory
+    (searched recursively). ``glob`` filters by workdir-relative path (e.g.
+    ``*.py``); ``ignore_case`` makes the match case-insensitive. Reserved/denied
+    paths, ``.git``/``node_modules``/``__pycache__``, oversized files, and
+    non-UTF-8 (binary) files are skipped.
+    """
+    try:
+        regex = re.compile(pattern, re.IGNORECASE if ignore_case else 0)
+    except re.error as exc:
+        raise ToolError(f"Invalid regex {pattern!r}: {exc}")
+    root = _resolve(ctx, path)
+    if not root.exists():
+        raise ToolError(f"No such file or directory: {path}")
+    workdir = ctx.workdir.resolve()
+    reserved = {p for p, _ in _reserved_paths(ctx)}
+
+    files: "list[Path]" = []
+    if root.is_file():
+        files.append(root)
+    else:
+        for dirpath, dirnames, filenames in os.walk(root):
+            here = Path(dirpath)
+            # Prune skip/reserved directories in place so os.walk won't descend.
+            dirnames[:] = [
+                d
+                for d in dirnames
+                if d not in _SEARCH_SKIP_DIRS and (here / d).resolve() not in reserved
+            ]
+            for name in sorted(filenames):
+                files.append(here / name)
+
+    matches: "list[str]" = []
+    truncated = False
+    for file in files:
+        resolved = file.resolve()
+        if resolved in reserved or any(r in resolved.parents for r in reserved):
+            continue
+        try:
+            rel = resolved.relative_to(workdir).as_posix()
+        except ValueError:
+            rel = file.as_posix()
+        if glob is not None and not fnmatch.fnmatch(rel, glob):
+            continue
+        try:
+            if resolved.stat().st_size > SEARCH_MAX_FILE_BYTES:
+                continue
+        except OSError:
+            continue
+        try:
+            content = resolved.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue  # binary or unreadable; skip
+        for lineno, line in enumerate(content.splitlines(), start=1):
+            if regex.search(line):
+                snippet = line.strip()[:SEARCH_MAX_LINE_CHARS]
+                matches.append(f"{rel}:{lineno}: {snippet}")
+                if len(matches) >= SEARCH_MAX_RESULTS:
+                    truncated = True
+                    break
+        if truncated:
+            break
+
+    if not matches:
+        return f"No matches for {pattern!r}."
+    out = "\n".join(matches)
+    if truncated:
+        out += "\n... [more matches; refine the pattern or narrow path]"
+    return _truncate(out)
 
 
 def list_dir(ctx: ToolContext, path: str = ".") -> str:
@@ -252,6 +376,7 @@ def use_skill(ctx: ToolContext, name: str) -> str:
 
 _DISPATCH: dict[str, Callable[..., str]] = {
     "read_file": read_file,
+    "search_text": search_text,
     "list_dir": list_dir,
     "write_file": write_file,
     "edit_file": edit_file,

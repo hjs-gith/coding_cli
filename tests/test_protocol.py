@@ -9,6 +9,14 @@ def test_parse_valid_tool_call():
     assert call.args == {"path": "a.py"}
 
 
+def test_parse_search_text_tool_call():
+    text = '```tool\n{"tool": "search_text", "args": {"pattern": "def foo", "glob": "*.py"}}\n```'
+    call = protocol.parse_tool_call(text)
+    assert call is not None
+    assert call.name == "search_text"
+    assert call.args == {"pattern": "def foo", "glob": "*.py"}
+
+
 def test_parse_captures_purpose():
     text = (
         '```tool\n{"tool": "run_shell", "args": {"command": "pytest -q"}, '

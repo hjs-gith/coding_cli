@@ -242,6 +242,8 @@ def _summarize_call(call: protocol.ToolCall) -> str:
         return f"run_shell: {args.get('command', '')}"
     if call.name == "use_skill":
         return f"use_skill: {args.get('name', '')}"
+    if call.name == "search_text":
+        return f"search_text: {args.get('pattern', '')}"
     if "path" in args:
         return f"{call.name}: {args['path']}"
     return call.name
