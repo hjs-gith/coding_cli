@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  .flow { display:flex; align-items:stretch; }
+  .step { flex:1; border:var(--stroke) solid var(--ink); border-radius:var(--radius);
+    padding:22px; background:transparent; }
+  .step.emph { background:var(--ink); color:var(--paper); }
+  .step.emph .desc { color:#cfcfcf; }
+  .num { font-size:13px; font-weight:800; letter-spacing:2px; color:var(--ink-soft); }
+  .step.emph .num { color:#a8a8a8; }
+  .step h3 { font-size:19px; margin:8px 0 8px; }
+  .desc { font-size:14.5px; color:var(--ink-soft); line-height:1.55; margin:0; }
+  .arrow { align-self:center; padding:0 12px; color:var(--ink-soft); font-size:28px; }
+</style></head><body>
+<div id="board">
+  <div class="flow">
+    <div class="step"><div class="num">01</div><h3>수집·정제</h3>
+      <p class="desc">사내 문서 인입, 개인정보·기밀 필터링, 포맷 정규화</p></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="num">02</div><h3>구조화</h3>
+      <p class="desc">지식그래프에 선수관계(DAG) 등록, 하이브리드 검색 인덱싱</p></div>
+    <div class="arrow">→</div>
+    <div class="step emph"><div class="num">03</div><h3>생성·검증</h3>
+      <p class="desc">커리큘럼 생성 후 신뢰도 라벨 부여 — 원문 대조 검증 포함</p></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="num">04</div><h3>배포</h3>
+      <p class="desc">학습 플랫폼 게시, 피드백 수집 → 재생성 루프</p></div>
+  </div>
+</div>
+</body></html>

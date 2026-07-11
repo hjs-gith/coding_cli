@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  #board { width: 1000px; }
+  .stack { display:flex; flex-direction:column; gap:10px; }
+  .band { display:grid; grid-template-columns:200px 1fr; align-items:stretch;
+    border:var(--stroke) solid var(--line); border-radius:var(--radius);
+    overflow:hidden; }
+  .band .name { background:transparent; border-right:var(--stroke) solid var(--line);
+    display:grid; place-items:center; font-size:17px; font-weight:800; padding:18px; }
+  .band.emph { border-color:var(--ink); }
+  .band.emph .name { background:var(--ink); color:var(--paper); border-right-color:var(--ink); }
+  .cells { display:flex; gap:8px; padding:12px; flex-wrap:wrap; align-items:center; }
+  .cell { border:1.5px solid var(--line); border-radius:var(--radius);
+    padding:9px 16px; font-size:14.5px; color:var(--ink); background:#fff; }
+  .band.emph .cell { border-color:var(--ink-soft); }
+</style></head><body>
+<div id="board">
+  <div class="stack">
+    <div class="band"><div class="name">사용자</div>
+      <div class="cells"><span class="cell">학습 포털 (React 정적 번들)</span>
+        <span class="cell">관리자 대시보드</span></div></div>
+    <div class="band emph"><div class="name">생성·검증</div>
+      <div class="cells"><span class="cell">커리큘럼 생성기</span>
+        <span class="cell">신뢰도 라벨러</span><span class="cell">원문 대조 검증</span></div></div>
+    <div class="band"><div class="name">API</div>
+      <div class="cells"><span class="cell">FastAPI</span>
+        <span class="cell">인증 (사내 SSO)</span></div></div>
+    <div class="band"><div class="name">데이터</div>
+      <div class="cells"><span class="cell">SQLite</span>
+        <span class="cell">문서 저장소</span><span class="cell">지식그래프 (DAG)</span></div></div>
+  </div>
+</div>
+</body></html>

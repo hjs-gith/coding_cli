@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  #board { width: 640px; }
+  .vt { position:relative; padding-left:42px; }
+  .vt::before { content:""; position:absolute; left:9px; top:12px; bottom:12px;
+    width:var(--stroke); background:var(--line); }
+  .ev { position:relative; padding-bottom:32px; }
+  .ev:last-child { padding-bottom:0; }
+  .dot { position:absolute; left:-42px; top:2px; width:20px; height:20px;
+    border-radius:50%; background:#fff; border:var(--stroke) solid var(--ink); }
+  .ev.done .dot { background:var(--ink); }
+  .ev.future .dot { border-color:var(--line); }
+  .when { font-size:13.5px; font-weight:800; letter-spacing:1px; }
+  .ev.future .when { color:var(--ink-soft); }
+  .ev h3 { font-size:19px; margin:4px 0 6px; }
+  .ev p { font-size:14.5px; color:var(--ink-soft); margin:0; line-height:1.55; }
+</style></head><body>
+<div id="board">
+  <div class="vt">
+    <div class="ev done"><div class="dot"></div><div class="when">2026 1Q · 완료</div>
+      <h3>플랫폼 v3 설계 확정</h3><p>단계별 전달 방식, 신뢰도 라벨 체계 포함</p></div>
+    <div class="ev done"><div class="dot"></div><div class="when">2026 2Q · 완료</div>
+      <h3>프론트엔드 이관</h3><p>외부 빌드 → 정적 번들 사내 반입 프로세스 수립</p></div>
+    <div class="ev"><div class="dot"></div><div class="when">2026 3Q · 진행 중</div>
+      <h3>파일럿 부서 운영</h3><p>2개 부서 대상, 생성 품질·활용률 측정</p></div>
+    <div class="ev future"><div class="dot"></div><div class="when">2026 4Q</div>
+      <h3>전사 확대</h3><p>전 부서 개방, 운영 이관 및 KPI 보고 체계화</p></div>
+  </div>
+</div>
+</body></html>

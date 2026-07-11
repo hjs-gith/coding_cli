@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  #board { width: 860px; }
+  .wrap { display:grid; grid-template-columns:32px 1fr; grid-template-rows:1fr 32px; }
+  .axis-y { writing-mode:vertical-rl; transform:rotate(180deg); text-align:center;
+    font-size:14px; font-weight:700; color:var(--ink-soft); letter-spacing:1px; }
+  .axis-x { grid-column:2; text-align:center; font-size:14px; font-weight:700;
+    color:var(--ink-soft); letter-spacing:1px; padding-top:10px; }
+  .matrix { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr;
+    gap:10px; height:620px; }
+  .quad { border:var(--stroke) solid var(--line); border-radius:var(--radius);
+    padding:22px; }
+  .quad.emph { background:var(--ink); border-color:var(--ink); color:var(--paper); }
+  .quad.emph li { color:#cfcfcf; }
+  .quad h3 { font-size:18px; margin:0 0 10px; }
+  .quad ul { margin:0; padding-left:20px; }
+  .quad li { font-size:14.5px; line-height:1.6; color:var(--ink-soft); }
+</style></head><body>
+<div id="board">
+  <div class="wrap">
+    <div class="axis-y">전략적 중요도 →</div>
+    <div class="matrix">
+      <div class="quad"><h3>역량 확보 필요</h3>
+        <ul><li>BMS 소프트웨어</li><li>EMS 운영 노하우</li></ul></div>
+      <div class="quad emph"><h3>즉시 사업화</h3>
+        <ul><li>팩 조립·양산 기술</li><li>품질관리 체계</li></ul></div>
+      <div class="quad"><h3>보류</h3><ul><li>셀 자체 생산</li></ul></div>
+      <div class="quad"><h3>파트너십 활용</h3>
+        <ul><li>PCS 인버터</li><li>시공·인허가</li></ul></div>
+    </div>
+    <div class="axis-x">보유 역량 적합도 →</div>
+  </div>
+</div>
+</body></html>

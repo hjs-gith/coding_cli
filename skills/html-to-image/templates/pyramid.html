@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  #board { width: 900px; }
+  .row { display:flex; align-items:center; gap:24px; margin-bottom:8px; }
+  .layer { height:104px; display:grid; place-items:center; font-size:19px;
+    font-weight:800; color:var(--paper); }
+  .l1 { width:280px; background:var(--ink);
+    clip-path:polygon(28% 0, 72% 0, 100% 100%, 0 100%); }
+  .l2 { width:420px; background:#5a5a5a;
+    clip-path:polygon(8% 0, 92% 0, 100% 100%, 0 100%); }
+  .l3 { width:560px; background:#969696;
+    clip-path:polygon(8% 0, 92% 0, 100% 100%, 0 100%); }
+  .l4 { width:700px; background:#d2d2d2; color:var(--ink);
+    clip-path:polygon(5% 0, 95% 0, 100% 100%, 0 100%); }
+  .desc { flex:1; font-size:14.5px; color:var(--ink-soft); line-height:1.55; }
+  .desc b { color:var(--ink); font-size:15.5px; display:block; margin-bottom:2px; }
+</style></head><body>
+<div id="board">
+  <div class="row"><div class="l1 layer">경영진</div>
+    <div class="desc"><b>AI 전략 리터러시</b>투자 판단·리스크 관점, 반기 1회 브리핑</div></div>
+  <div class="row"><div class="l2 layer">추진 리더</div>
+    <div class="desc"><b>과제 설계 역량</b>에이전트 지시·검증 심화, 부서별 챔피언</div></div>
+  <div class="row"><div class="l3 layer">실무 전문가</div>
+    <div class="desc"><b>도구 활용 숙련</b>사내 도구 실습 중심 4주 과정</div></div>
+  <div class="row" style="margin-bottom:0"><div class="l4 layer">전 임직원</div>
+    <div class="desc"><b>기본 소양</b>AI 기초·보안 수칙, 전사 필수 이수</div></div>
+</div>
+</body></html>

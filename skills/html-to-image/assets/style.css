@@ -1,0 +1,23 @@
+/* style.css — minimal monochrome design tokens for concept diagrams.
+   Grayscale by default so assets sit on any deck. Emphasis is a single
+   solid dark fill, never a second color. Edit tokens to rebrand all. */
+
+:root {
+  --ink:      #1f1f1f;   /* primary text, emphasis fill, strong strokes */
+  --ink-soft: #6e6e6e;   /* secondary text, arrows */
+  --line:     #b8b8b8;   /* light strokes, rails */
+  --paper:    #ffffff;   /* text on emphasis fill */
+
+  --font: "Pretendard", "Malgun Gothic", -apple-system, "Segoe UI",
+          "Noto Sans KR", sans-serif;
+  --stroke: 2px;         /* uniform diagram stroke weight */
+  --radius: 6px;         /* subtle; set 0 for sharp corners */
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--font); color: var(--ink); }
+
+/* Artboard: capture with  --selector "#board" --transparent */
+#board { background: transparent; padding: 4px; width: 1600px; }
+
+.hl { font-weight: 800; }

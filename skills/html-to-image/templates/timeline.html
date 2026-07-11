@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  .timeline { display:flex; position:relative; }
+  .timeline::before { content:""; position:absolute; top:11px; left:2%; right:2%;
+    height:var(--stroke); background:var(--line); }
+  .phase { flex:1; position:relative; padding:40px 24px 0 0; }
+  .dot { position:absolute; top:2px; left:0; width:20px; height:20px;
+    border-radius:50%; background:#fff; border:var(--stroke) solid var(--ink); }
+  .phase.done .dot { background:var(--ink); }
+  .phase.future .dot { border-color:var(--line); }
+  .when { font-size:13.5px; font-weight:800; letter-spacing:1px; }
+  .phase.future .when { color:var(--ink-soft); }
+  .phase h3 { font-size:19px; margin:6px 0 6px; }
+  .phase p { font-size:14.5px; color:var(--ink-soft); margin:0; line-height:1.5; }
+</style></head><body>
+<div id="board">
+  <div class="timeline">
+    <div class="phase done"><div class="dot"></div><div class="when">2026 H1 · 완료</div>
+      <h3>역량 진단</h3><p>내부 기술자산 매핑, 파트너 후보 선정, 규제 검토 완료</p></div>
+    <div class="phase"><div class="dot"></div><div class="when">2026 H2 · 진행 중</div>
+      <h3>파일럿 구축</h3><p>사내 유휴부지 500kWh 실증, 인력 양성 1기 착수</p></div>
+    <div class="phase future"><div class="dot"></div><div class="when">2027</div>
+      <h3>상업 수주</h3><p>C&I 고객 대상 첫 상업 프로젝트 2건 수주 목표</p></div>
+    <div class="phase future"><div class="dot"></div><div class="when">2028</div>
+      <h3>사업부 독립</h3><p>ESS 사업부 분리, 매출 300억 원 규모 달성</p></div>
+  </div>
+</div>
+</body></html>

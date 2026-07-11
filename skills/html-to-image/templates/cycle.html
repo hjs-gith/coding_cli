@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  #board { width: 880px; }
+  .cycle { position:relative; width:780px; height:780px; margin:0 auto; }
+  .cycle svg { position:absolute; inset:0; }
+  .node { position:absolute; width:230px; text-align:center;
+    transform:translate(-50%,-50%); }
+  .num { font-size:13px; font-weight:800; letter-spacing:2px; color:var(--ink-soft); }
+  .node h3 { font-size:19px; margin:6px 0 5px; }
+  .node p { font-size:14px; color:var(--ink-soft); margin:0; line-height:1.5; }
+  .hub { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:190px; height:190px; border-radius:50%; background:#fff;
+    border:var(--stroke) solid var(--ink); display:grid; place-items:center;
+    text-align:center; font-size:19px; font-weight:800; line-height:1.4;
+    padding:16px; }
+</style></head><body>
+<div id="board">
+  <div class="cycle">
+    <svg viewBox="0 0 780 780">
+      <defs><marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 z" fill="#6e6e6e"/></marker></defs>
+      <g fill="none" stroke="#6e6e6e" stroke-width="2">
+        <path d="M 505 155 A 270 270 0 0 1 625 275" marker-end="url(#a)"/>
+        <path d="M 625 505 A 270 270 0 0 1 505 625" marker-end="url(#a)"/>
+        <path d="M 275 625 A 270 270 0 0 1 155 505" marker-end="url(#a)"/>
+        <path d="M 155 275 A 270 270 0 0 1 275 155" marker-end="url(#a)"/>
+      </g>
+    </svg>
+    <div class="hub">지식 선순환<br>루프</div>
+    <div class="node" style="left:50%; top:11%">
+      <div class="num">01</div><h3>문서 축적</h3><p>현업 산출물 자동 인입</p></div>
+    <div class="node" style="left:89%; top:50%">
+      <div class="num">02</div><h3>학습화</h3><p>커리큘럼 자동 생성</p></div>
+    <div class="node" style="left:50%; top:89%">
+      <div class="num">03</div><h3>현업 적용</h3><p>교육 이수 → 업무 활용</p></div>
+    <div class="node" style="left:11%; top:50%">
+      <div class="num">04</div><h3>피드백</h3><p>개선점이 새 문서로 환류</p></div>
+  </div>
+</div>
+</body></html>

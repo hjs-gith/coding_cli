@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  #board { width: 1100px; }
+  .cmp { display:grid; grid-template-columns:1fr 64px 1fr; align-items:stretch; }
+  .col { border-radius:var(--radius); padding:24px; }
+  .asis { border:var(--stroke) solid var(--line); }
+  .tobe { background:var(--ink); color:var(--paper); }
+  .col h3 { font-size:14px; font-weight:800; letter-spacing:2px; margin:0 0 16px;
+    text-transform:uppercase; color:var(--ink-soft); }
+  .tobe h3 { color:#a8a8a8; }
+  .item { padding:13px 0; border-top:1px solid var(--line); font-size:15.5px;
+    line-height:1.5; }
+  .item:first-of-type { border-top:none; }
+  .tobe .item { border-top-color:#4a4a4a; }
+  .item b { display:block; font-size:13.5px; color:var(--ink-soft); margin-bottom:3px; }
+  .tobe .item b { color:#9c9c9c; }
+  .mid { display:grid; place-items:center; font-size:32px; color:var(--ink); }
+</style></head><body>
+<div id="board">
+  <div class="cmp">
+    <div class="col asis"><h3>As-Is · 현행</h3>
+      <div class="item"><b>교육자료 제작</b>담당자 수작업, 과정당 3주 소요</div>
+      <div class="item"><b>최신성</b>연 1회 일괄 개정 — 현장과 괴리</div>
+      <div class="item"><b>신뢰성</b>출처 불명 자료 혼재</div></div>
+    <div class="mid">→</div>
+    <div class="col tobe"><h3>To-Be · 개선</h3>
+      <div class="item"><b>교육자료 제작</b>사내 문서에서 자동 생성, 3일 내 배포</div>
+      <div class="item"><b>최신성</b>원본 문서 변경 시 자동 재생성</div>
+      <div class="item"><b>신뢰성</b>전 항목 신뢰도 라벨 + 원문 링크</div></div>
+  </div>
+</div>
+</body></html>
