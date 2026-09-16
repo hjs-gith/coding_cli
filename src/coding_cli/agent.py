@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, List, Optional
 
 from . import protocol, skills as skills_mod, tools
-from .dify_client import DifyClient
+from .dify_client import DifyClient, image_file
 from .history import ChangeHistory
 from .skills import Skill
 
@@ -104,6 +104,8 @@ class Agent:
     deny: tuple[str, ...] = ()
     mode: str = tools.MODE_DEFAULT
     sink: Optional[object] = None  # live-output sink (begin/delta/end/answer)
+    # Workdir-relative image paths queued by /image, attached to the next turn.
+    pending_images: List[str] = field(default_factory=list)
     _preamble_sent: bool = False
     _exit_plan_pending: bool = False
 
@@ -167,8 +169,35 @@ class Agent:
     def _preamble(self) -> str:
         return protocol.build_preamble(skills_mod.catalog(self.skills))
 
-    def run_turn(self, user_input: str) -> str:
-        """Run a single user turn to completion, returning the final answer."""
+    def _upload_images(self, images: "Optional[List[str]]") -> "List[dict]":
+        """Resolve and upload local images, returning chat ``files`` descriptors.
+
+        Paths go through the tool sandbox, so an attachment must live inside the
+        working directory and may not be on the denylist. Raises on a bad path or
+        a failed upload, before the turn starts.
+        """
+        if not images:
+            return []
+        ctx = self._tool_context()
+        descriptors = []
+        for path in images:
+            target = tools._resolve(ctx, path)  # workdir boundary + denylist
+            file_id = self.client.upload_file(target)
+            descriptors.append(image_file(file_id))
+            if self.report is not None:
+                self.report("note", f"attached image: {path}")
+        return descriptors
+
+    def run_turn(self, user_input: str, images: "Optional[List[str]]" = None) -> str:
+        """Run a single user turn to completion, returning the final answer.
+
+        ``images`` are local image paths attached to this message for a
+        vision-capable Dify app. They ride on the first request of the turn only;
+        Dify keeps them in conversation history for the rest of the loop.
+        """
+        # Upload first: a bad path or failed upload aborts before any state
+        # (preamble sent, plan hint consumed) is mutated.
+        pending_files = self._upload_images(images)
         # In plan mode, remind the model (per turn, since the mode can change
         # mid-session) to research read-only and propose a plan instead of acting.
         if self.mode == tools.MODE_PLAN:
@@ -194,7 +223,9 @@ class Agent:
                 query,
                 stream=self.stream,
                 on_delta=emitter.feed if emitter is not None else None,
+                files=pending_files or None,
             )
+            pending_files = []  # attachments ride on the first request only
             if emitter is not None:
                 emitter.finish()
             call = protocol.parse_tool_call(result.answer)

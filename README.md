@@ -129,10 +129,39 @@ coding-cli --undo                # revert the last recorded file change, then ex
 
 In the REPL: `/plan`, `/auto`, `/normal` (switch permission mode), `/reset` (new
 conversation), `/cd <path>` (change the working directory, or no argument to
-print it), `/diff` (review this session's file changes), `/undo` (revert the most
-recent change, repeatable), `/skills` (list skills), `/help`, `/exit` (or
-Ctrl-D). All file access is sandboxed to the working directory (and re-rooted
-when you `/cd`).
+print it), `/image <path>` (attach an image to your next message), `/diff`
+(review this session's file changes), `/undo` (revert the most recent change,
+repeatable), `/skills` (list skills), `/help`, `/exit` (or Ctrl-D). All file
+access is sandboxed to the working directory (and re-rooted when you `/cd`).
+
+### Images (vision)
+
+Attach a screenshot or mockup so the model can look at it — handy for checking
+frontend layouts:
+
+```
+> /image designs/header.png
+  attached designs/header.png — sent with your next message.
+> does this header match the spacing in the spec?
+```
+
+`/image` with no arguments lists what's queued; `/image clear` empties it.
+Non-interactively, use the repeatable `--image` flag:
+
+```bash
+coding-cli --once "does this layout look right?" --image designs/header.png
+```
+
+Details:
+
+- Supported: `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, up to 10 MB each.
+- Attachments are **sandboxed to the working directory** and respect the
+  denylist, same as the file tools — `/cd` first to reach an image elsewhere.
+- They apply to **exactly one message** (consumed on send). The image is
+  uploaded once and rides on the first request of that turn; Dify keeps it in
+  conversation history for the rest of the agentic loop.
+- **Requires the Dify app to have Vision enabled** and a vision-capable model.
+  Without it the upload is rejected, and coding-cli says so in the error.
 
 ### Confirming tool calls
 
@@ -362,7 +391,7 @@ Two caveats to be aware of:
 
 ## Develop
 
-Run the test suite (124 unit tests covering the protocol, tools, skills, and the
+Run the test suite (141 unit tests covering the protocol, tools, skills, and the
 agent loop with a mocked Dify client — no network required):
 
 ```bash
@@ -374,7 +403,7 @@ uv run pytest          # or: .venv/bin/pytest
 | Module | Responsibility |
 | --- | --- |
 | `config.py` | Load `.env` / env settings |
-| `dify_client.py` | Dify chat-messages wrapper (streaming + blocking) |
+| `dify_client.py` | Dify chat-messages wrapper (streaming + blocking) + image upload |
 | `protocol.py` | Tool-call preamble + parse/format |
 | `tools.py` | `read_file` (whole or line-range), `search_text` (regex grep), `list_dir`, `write_file`, `edit_file`, `run_shell`, `use_skill` |
 | `skills.py` | Discover/parse Markdown skills, load on demand |

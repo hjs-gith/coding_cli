@@ -1,3 +1,6 @@
+import pytest
+
+from coding_cli import tools
 from coding_cli.agent import Agent
 from coding_cli.dify_client import ChatResult
 from coding_cli.history import ChangeHistory
@@ -13,15 +16,22 @@ class FakeClient:
     def __init__(self, responses):
         self._responses = list(responses)
         self.queries = []
+        self.files_per_call = []  # the ``files`` arg of each chat() call
+        self.uploaded = []        # paths passed to upload_file()
         self.conversation_id = ""
 
-    def chat(self, query, stream=True, on_delta=None):
+    def chat(self, query, stream=True, on_delta=None, files=None):
         self.queries.append(query)
+        self.files_per_call.append(files)
         answer = self._responses.pop(0)
         if on_delta is not None and stream:
             # Simulate streaming by delivering the whole answer as one delta.
             on_delta(answer)
         return ChatResult(answer=answer, conversation_id="conv-1", message_id="m")
+
+    def upload_file(self, path):
+        self.uploaded.append(str(path))
+        return f"file-{len(self.uploaded)}"
 
     def reset(self):
         self.conversation_id = ""
@@ -362,3 +372,52 @@ def test_use_skill_loads_body(tmp_path):
     agent = make_agent(tmp_path, responses, skills=skills)
     agent.run_turn("greet")
     assert "Wave at the user." in agent.client.queries[1]
+
+
+# --- image attachments ------------------------------------------------------
+
+def _png(path):
+    path.write_bytes(
+        b"\x89PNG\r\n\x1a\n" + b"\x00" * 32  # header is enough; upload is faked
+    )
+
+
+def test_images_attached_to_first_call_only(tmp_path):
+    _png(tmp_path / "shot.png")
+    responses = [
+        '```tool\n{"tool": "list_dir", "args": {"path": "."}}\n```',
+        "That layout looks fine.",
+    ]
+    agent = make_agent(tmp_path, responses)
+    agent.run_turn("check this layout", images=["shot.png"])
+
+    assert agent.client.uploaded == [str(tmp_path / "shot.png")]
+    # First request carries the descriptor; the tool-result request does not.
+    assert agent.client.files_per_call[0] == [
+        {"type": "image", "transfer_method": "local_file", "upload_file_id": "file-1"}
+    ]
+    assert agent.client.files_per_call[1] is None
+
+
+def test_no_images_sends_no_files(tmp_path):
+    agent = make_agent(tmp_path, ["done"])
+    agent.run_turn("hi")
+    assert agent.client.files_per_call == [None]
+    assert agent.client.uploaded == []
+
+
+def test_image_outside_workdir_rejected(tmp_path):
+    agent = make_agent(tmp_path, ["unused"])
+    with pytest.raises(tools.ToolError):
+        agent.run_turn("look", images=["../outside.png"])
+    assert agent.client.uploaded == []  # never attempted
+    assert agent.client.queries == []   # turn aborted before sending
+
+
+def test_image_on_denylist_rejected(tmp_path):
+    (tmp_path / ".git").mkdir()
+    _png(tmp_path / ".git" / "secret.png")
+    agent = make_agent(tmp_path, ["unused"], deny=(".git",))
+    with pytest.raises(tools.ToolError):
+        agent.run_turn("look", images=[".git/secret.png"])
+    assert agent.client.uploaded == []

@@ -8,10 +8,17 @@ turns of the agentic loop.
 from __future__ import annotations
 
 import json
+import mimetypes
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 import requests
+
+# Image attachments (Dify vision input). Dify accepts these for image files;
+# the app itself must have Vision enabled for the model to actually see them.
+IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 
 class DifyError(RuntimeError):
@@ -50,16 +57,76 @@ class DifyClient:
 
     # -- public API ----------------------------------------------------------
 
-    def chat(self, query: str, stream: bool = True, on_delta=None) -> ChatResult:
+    def chat(
+        self,
+        query: str,
+        stream: bool = True,
+        on_delta=None,
+        files: "Optional[list[dict]]" = None,
+    ) -> ChatResult:
         """Send ``query`` and return the model's answer.
 
         Updates ``self.conversation_id`` from the response so subsequent calls
         continue the same conversation. When streaming, ``on_delta`` (if given)
         is called with each incremental piece of answer text as it arrives.
+        ``files`` carries attachment descriptors (see ``image_file``) for vision
+        input; it is omitted from the request entirely when empty.
         """
         if stream:
-            return self._chat_streaming(query, on_delta)
-        return self._chat_blocking(query)
+            return self._chat_streaming(query, on_delta, files)
+        return self._chat_blocking(query, files)
+
+    def upload_file(self, path: "Path | str") -> str:
+        """Upload a local image to Dify and return its file id.
+
+        The id is passed back in a ``chat`` ``files`` entry. Raises ``DifyError``
+        for an unsupported extension, an oversized file, or an API failure.
+        """
+        target = Path(path)
+        if not target.is_file():
+            raise DifyError(f"No such file: {target}")
+        suffix = target.suffix.lower()
+        if suffix not in IMAGE_EXTS:
+            raise DifyError(
+                f"Unsupported image type '{suffix or target.name}'. "
+                f"Supported: {', '.join(sorted(IMAGE_EXTS))}."
+            )
+        size = target.stat().st_size
+        if size > MAX_IMAGE_BYTES:
+            raise DifyError(
+                f"{target.name} is {size / 1_048_576:.1f} MB; the limit is "
+                f"{MAX_IMAGE_BYTES // 1_048_576} MB."
+            )
+        mime = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+        try:
+            with target.open("rb") as fh:
+                resp = self._session.post(
+                    f"{self.base_url}/files/upload",
+                    headers=self._auth_headers,  # no JSON content-type: multipart
+                    files={"file": (target.name, fh, mime)},
+                    data={"user": self.user_id},
+                    timeout=self.timeout,
+                )
+        except requests.RequestException as exc:
+            raise DifyError(f"Upload to Dify failed: {exc}") from exc
+        except OSError as exc:
+            raise DifyError(f"Could not read {target}: {exc}") from exc
+        if resp.status_code >= 400:
+            detail = _format_http_error(resp)
+            if resp.status_code in (400, 403):
+                detail += (
+                    " — the Dify app may not have Vision enabled, or the file "
+                    "type is not permitted for this app."
+                )
+            raise DifyError(detail)
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise DifyError(f"Invalid JSON from Dify upload: {exc}") from exc
+        file_id = data.get("id")
+        if not file_id:
+            raise DifyError(f"Dify upload returned no file id: {data}")
+        return file_id
 
     # -- internals -----------------------------------------------------------
 
@@ -68,27 +135,38 @@ class DifyClient:
         return f"{self.base_url}/chat-messages"
 
     @property
-    def _headers(self) -> dict:
-        return {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
+    def _auth_headers(self) -> dict:
+        return {"Authorization": f"Bearer {self.api_key}"}
 
-    def _body(self, query: str, response_mode: str) -> dict:
-        return {
+    @property
+    def _headers(self) -> dict:
+        return {**self._auth_headers, "Content-Type": "application/json"}
+
+    def _body(
+        self,
+        query: str,
+        response_mode: str,
+        files: "Optional[list[dict]]" = None,
+    ) -> dict:
+        body = {
             "query": query,
             "inputs": {},
             "response_mode": response_mode,
             "user": self.user_id,
             "conversation_id": self.conversation_id,
         }
+        if files:  # omit entirely when unused, keeping the plain request shape
+            body["files"] = list(files)
+        return body
 
-    def _chat_blocking(self, query: str) -> ChatResult:
+    def _chat_blocking(
+        self, query: str, files: "Optional[list[dict]]" = None
+    ) -> ChatResult:
         try:
             resp = self._session.post(
                 self._url,
                 headers=self._headers,
-                json=self._body(query, "blocking"),
+                json=self._body(query, "blocking", files),
                 timeout=self.timeout,
             )
         except requests.RequestException as exc:
@@ -108,12 +186,14 @@ class DifyClient:
             self.conversation_id = result.conversation_id
         return result
 
-    def _chat_streaming(self, query: str, on_delta=None) -> ChatResult:
+    def _chat_streaming(
+        self, query: str, on_delta=None, files: "Optional[list[dict]]" = None
+    ) -> ChatResult:
         try:
             resp = self._session.post(
                 self._url,
                 headers=self._headers,
-                json=self._body(query, "streaming"),
+                json=self._body(query, "streaming", files),
                 timeout=self.timeout,
                 stream=True,
             )
@@ -157,6 +237,15 @@ class DifyClient:
             conversation_id=conversation_id,
             message_id=message_id,
         )
+
+
+def image_file(upload_file_id: str) -> dict:
+    """Build a chat ``files`` entry for an already-uploaded image."""
+    return {
+        "type": "image",
+        "transfer_method": "local_file",
+        "upload_file_id": upload_file_id,
+    }
 
 
 def _format_http_error(resp: "requests.Response") -> str:

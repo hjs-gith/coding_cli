@@ -9,6 +9,7 @@ from pathlib import Path
 from . import shell_policy, ui
 from .agent import Agent, build_agent
 from .config import Config, ConfigError
+from .dify_client import IMAGE_EXTS
 from .history import ChangeHistory
 from .tools import MODE_AUTO, MODE_DEFAULT, MODE_PLAN, ConfirmDecision
 
@@ -98,9 +99,9 @@ def _make_reporter():
     return report
 
 
-def _run_once(agent: Agent, prompt: str) -> int:
+def _run_once(agent: Agent, prompt: str, images: "list[str] | None" = None) -> int:
     try:
-        agent.run_turn(prompt)  # the agent renders the answer via its sink
+        agent.run_turn(prompt, images=images)  # renders the answer via its sink
     except Exception as exc:  # surface backend/tool errors cleanly
         ui.error(f"Error: {exc}")
         return 1
@@ -128,8 +129,11 @@ def _repl(agent: Agent) -> int:
             if _handle_command(agent, line):
                 return 0
             continue
+        # Attachments apply to exactly one message: consume the queue on send.
+        images = list(agent.pending_images)
+        agent.pending_images.clear()
         try:
-            agent.run_turn(line)  # the agent renders the answer via its sink
+            agent.run_turn(line, images=images)  # renders the answer via its sink
             if agent.mode == MODE_PLAN:
                 _handle_plan_approval(agent)
         except KeyboardInterrupt:
@@ -164,6 +168,41 @@ def _handle_plan_approval(agent: Agent) -> None:
     agent.run_turn("The plan is approved. Implement it now.")  # rendered via sink
 
 
+def _handle_image(agent: Agent, line: str) -> None:
+    """``/image`` — queue local images to attach to the next message.
+
+    ``/image <path> [more...]`` queues, bare ``/image`` lists the queue, and
+    ``/image clear`` empties it. Paths are validated here for a friendly error;
+    the workdir sandbox is enforced again at send time in ``Agent.run_turn``.
+    """
+    parts = line.split()[1:]
+    if not parts:
+        if agent.pending_images:
+            ui.notice("Queued for the next message: " + ", ".join(agent.pending_images))
+        else:
+            ui.notice("No images queued. Usage: /image <path> [more...]")
+        return
+    if len(parts) == 1 and parts[0].lower() == "clear":
+        agent.pending_images.clear()
+        ui.notice("Cleared queued images.")
+        return
+    for raw in parts:
+        candidate = Path(raw).expanduser()
+        if not candidate.is_absolute():
+            candidate = agent.workdir / candidate
+        if not candidate.is_file():
+            ui.warn(f"No such file: {raw}")
+            continue
+        if candidate.suffix.lower() not in IMAGE_EXTS:
+            ui.warn(
+                f"Not a supported image: {raw} "
+                f"({', '.join(sorted(IMAGE_EXTS))})"
+            )
+            continue
+        agent.pending_images.append(raw)
+        ui.notice(f"Attached {raw} — sent with your next message.")
+
+
 def _handle_command(agent: Agent, line: str) -> bool:
     """Handle a /slash command. Returns True if the REPL should exit."""
     cmd = line.split()[0].lower()
@@ -184,6 +223,8 @@ def _handle_command(agent: Agent, line: str) -> bool:
                 ui.out(f"  {name} — {skill.description}")
         else:
             ui.notice("  (no skills discovered)")
+    elif cmd == "/image":
+        _handle_image(agent, line)
     elif cmd == "/diff":
         ui.diff(agent.session_diff())
     elif cmd == "/undo":
@@ -197,8 +238,8 @@ def _handle_command(agent: Agent, line: str) -> bool:
         ui.notice(f"Mode: {agent.mode}")
     elif cmd == "/help":
         ui.out(
-            "Commands: /plan  /auto  /normal  /reset  /cd  /diff  /undo  "
-            "/skills  /help  /exit"
+            "Commands: /plan  /auto  /normal  /reset  /cd  /image  /diff  "
+            "/undo  /skills  /help  /exit"
         )
     else:
         ui.warn(f"Unknown command: {cmd}. Try /help.")
@@ -236,6 +277,13 @@ def main(argv: list[str] | None = None) -> int:
         "--no-stream",
         action="store_true",
         help="Use blocking responses instead of streaming.",
+    )
+    parser.add_argument(
+        "--image",
+        metavar="PATH",
+        action="append",
+        help="Attach a local image to the prompt (repeatable). Requires the "
+        "Dify app to have Vision enabled.",
     )
     parser.add_argument(
         "--undo",
@@ -276,7 +324,9 @@ def main(argv: list[str] | None = None) -> int:
     agent.confirm = _make_confirm(lambda: agent.workdir)
 
     if args.once:
-        return _run_once(agent, args.once)
+        return _run_once(agent, args.once, images=args.image)
+    if args.image:  # seed the REPL queue so the first message carries them
+        agent.pending_images.extend(args.image)
     return _repl(agent)
 
 

@@ -65,3 +65,56 @@ def test_dangerous_not_auto_approved(monkeypatch, tmp_path):
     decision = confirm("run_shell", "rm -rf build")
     assert decision.approved is False
     assert calls  # was prompted, not silently auto-approved
+
+
+# --- /image -----------------------------------------------------------------
+
+class _ImageAgent:
+    """Stand-in exposing just what /image touches."""
+
+    def __init__(self, workdir):
+        self.workdir = workdir
+        self.pending_images = []
+        self.mode = MODE_DEFAULT
+
+
+def _png(tmp_path, name="shot.png"):
+    p = tmp_path / name
+    p.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+    return p
+
+
+def test_image_command_queues(tmp_path):
+    _png(tmp_path)
+    a = _ImageAgent(tmp_path)
+    assert cli._handle_command(a, "/image shot.png") is False
+    assert a.pending_images == ["shot.png"]
+
+
+def test_image_command_queues_multiple(tmp_path):
+    _png(tmp_path, "a.png")
+    _png(tmp_path, "b.jpg")
+    a = _ImageAgent(tmp_path)
+    cli._handle_command(a, "/image a.png b.jpg")
+    assert a.pending_images == ["a.png", "b.jpg"]
+
+
+def test_image_command_clear(tmp_path):
+    _png(tmp_path)
+    a = _ImageAgent(tmp_path)
+    cli._handle_command(a, "/image shot.png")
+    cli._handle_command(a, "/image clear")
+    assert a.pending_images == []
+
+
+def test_image_command_rejects_missing_and_non_image(tmp_path):
+    (tmp_path / "notes.txt").write_text("hi")
+    a = _ImageAgent(tmp_path)
+    cli._handle_command(a, "/image nope.png")
+    cli._handle_command(a, "/image notes.txt")
+    assert a.pending_images == []  # neither queued
+
+
+def test_help_mentions_image(capsys):
+    cli._handle_command(_StubAgent(), "/help")
+    assert "/image" in capsys.readouterr().out
