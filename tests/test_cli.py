@@ -69,13 +69,22 @@ def test_dangerous_not_auto_approved(monkeypatch, tmp_path):
 
 # --- /image -----------------------------------------------------------------
 
+class _VisionClient:
+    def __init__(self, enabled):
+        self._enabled = enabled
+
+    def image_upload_enabled(self):
+        return self._enabled
+
+
 class _ImageAgent:
     """Stand-in exposing just what /image touches."""
 
-    def __init__(self, workdir):
+    def __init__(self, workdir, vision=None):
         self.workdir = workdir
         self.pending_images = []
         self.mode = MODE_DEFAULT
+        self.client = _VisionClient(vision)
 
 
 def _png(tmp_path, name="shot.png"):
@@ -113,6 +122,22 @@ def test_image_command_rejects_missing_and_non_image(tmp_path):
     cli._handle_command(a, "/image nope.png")
     cli._handle_command(a, "/image notes.txt")
     assert a.pending_images == []  # neither queued
+
+
+def test_image_warns_when_vision_disabled(tmp_path, capsys):
+    _png(tmp_path)
+    a = _ImageAgent(tmp_path, vision=False)
+    cli._handle_command(a, "/image shot.png")
+    out = capsys.readouterr().out
+    assert "image upload disabled" in out
+    assert a.pending_images == ["shot.png"]  # still queued; just warned
+
+
+def test_image_quiet_when_vision_unknown(tmp_path, capsys):
+    _png(tmp_path)
+    a = _ImageAgent(tmp_path, vision=None)
+    cli._handle_command(a, "/image shot.png")
+    assert "image upload disabled" not in capsys.readouterr().out
 
 
 def test_help_mentions_image(capsys):

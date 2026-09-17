@@ -33,6 +33,9 @@ class FakeClient:
         self.uploaded.append(str(path))
         return f"file-{len(self.uploaded)}"
 
+    def image_upload_enabled(self):
+        return None  # unknown; the agent should not warn
+
     def reset(self):
         self.conversation_id = ""
 
@@ -412,6 +415,55 @@ def test_image_outside_workdir_rejected(tmp_path):
         agent.run_turn("look", images=["../outside.png"])
     assert agent.client.uploaded == []  # never attempted
     assert agent.client.queries == []   # turn aborted before sending
+
+
+def test_view_image_attaches_to_next_request(tmp_path):
+    _png(tmp_path / "shot.png")
+    responses = [
+        '```tool\n{"tool": "view_image", "args": {"path": "shot.png"}}\n```',
+        "The header is misaligned.",
+    ]
+    agent = make_agent(tmp_path, responses)
+    out = agent.run_turn("review the mockups")
+
+    assert out == "The header is misaligned."
+    assert agent.client.uploaded == [str(tmp_path / "shot.png")]
+    # First request had nothing; the TOOL_RESULT request carries the image.
+    assert agent.client.files_per_call[0] is None
+    assert agent.client.files_per_call[1] == [
+        {"type": "image", "transfer_method": "local_file", "upload_file_id": "file-1"}
+    ]
+    assert "TOOL_RESULT[view_image]" in agent.client.queries[1]
+
+
+def test_view_image_rejects_non_image(tmp_path):
+    (tmp_path / "a.txt").write_text("hi")
+    responses = [
+        '```tool\n{"tool": "view_image", "args": {"path": "a.txt"}}\n```',
+        "ok",
+    ]
+    agent = make_agent(tmp_path, responses)
+    agent.run_turn("look")
+    assert "ERROR" in agent.client.queries[1]
+    assert agent.client.uploaded == []
+    assert agent.client.files_per_call[1] is None
+
+
+def test_view_image_upload_failure_reported_to_model(tmp_path):
+    _png(tmp_path / "shot.png")
+    responses = [
+        '```tool\n{"tool": "view_image", "args": {"path": "shot.png"}}\n```',
+        "ok",
+    ]
+    agent = make_agent(tmp_path, responses)
+
+    def boom(_path):
+        raise RuntimeError("vision disabled")
+
+    agent.client.upload_file = boom
+    agent.run_turn("look")  # the turn continues rather than crashing
+    assert "Could not attach the image" in agent.client.queries[1]
+    assert agent.client.files_per_call[1] is None
 
 
 def test_image_on_denylist_rejected(tmp_path):

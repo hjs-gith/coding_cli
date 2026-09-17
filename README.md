@@ -15,6 +15,8 @@ Dify conversation (a ReAct loop).
 - **Reads your code** — pulls files and directory listings in as context.
 - **Edits files** — creates new files and makes precise, single-occurrence edits.
 - **Runs shell commands** — executes commands and reasons over their output.
+- **Sees images** — opens screenshots and mockups itself via `view_image`, or
+  attach one with `/image` (needs a vision-enabled Dify app).
 - **Custom skills** — author reusable, Markdown-defined workflows; auto-discovered.
 - **Safe by default** — every write/edit/shell action asks for confirmation, and
   all file access is sandboxed to the working directory.
@@ -136,8 +138,20 @@ access is sandboxed to the working directory (and re-rooted when you `/cd`).
 
 ### Images (vision)
 
-Attach a screenshot or mockup so the model can look at it — handy for checking
-frontend layouts:
+The model can open images **on its own** — if a task involves a screenshot or
+mockup, it calls `view_image(path)`, and the picture is uploaded and attached to
+that tool result so it genuinely sees it on the next turn:
+
+```
+> check the header spacing against designs/header.png
+  → list_dir: designs
+  → view_image: designs/header.png
+  ✓ view_image: Attached designs/header.png...
+The header padding is 8px larger than the spec.
+```
+
+You can also attach one yourself, which is useful when you want a specific image
+in front of the model from the start:
 
 ```
 > /image designs/header.png
@@ -161,7 +175,38 @@ Details:
   uploaded once and rides on the first request of that turn; Dify keeps it in
   conversation history for the rest of the agentic loop.
 - **Requires the Dify app to have Vision enabled** and a vision-capable model.
-  Without it the upload is rejected, and coding-cli says so in the error.
+
+#### "The model says it doesn't see any image"
+
+A vision-capable *model* is not enough — the **Dify app** must also accept file
+uploads, and this is the usual cause. coding-cli reads the app's published
+settings and warns you when it can tell:
+
+```
+> /image shot.png
+  attached shot.png — sent with your next message.
+  ! This Dify app reports image upload disabled, so the model will not see
+    the image. Enable Vision / file upload in the Dify app settings...
+```
+
+Checklist when the model still reports no image:
+
+1. In the Dify console, open the app → **Features** → enable **Vision**
+   (file upload), and confirm the app's model is a vision model.
+2. If the app is a **Chatflow/Workflow** app rather than a simple chat app,
+   top-level files do not reach the model automatically — the LLM node must have
+   vision turned on and be wired to the `sys.files` variable.
+3. Re-run with `CODING_CLI_DEBUG=1` to print the upload response and the exact
+   `files` payload sent to Dify:
+
+   ```bash
+   CODING_CLI_DEBUG=1 coding-cli
+   ```
+
+   A successful upload prints `[dify:upload] {'id': ...}` and the attached
+   request prints `[dify:chat.files] [...]`. If both appear and the model still
+   sees nothing, the file is reaching Dify and the app config is the remaining
+   suspect.
 
 ### Confirming tool calls
 
@@ -257,7 +302,7 @@ change even in a later session.
 
 ### Protected paths
 
-The agent's file tools (`read_file`, `search_text`, `list_dir`, `write_file`, `edit_file`) refuse
+The agent's file tools (`read_file`, `search_text`, `view_image`, `list_dir`, `write_file`, `edit_file`) refuse
 to touch a denylist of workdir-relative paths, and those paths are hidden from
 `list_dir`. The `.coding_cli/` snapshot directory is **always** reserved (so the
 model can't corrupt your undo history); on top of that, `CODING_CLI_DENY`
@@ -391,7 +436,7 @@ Two caveats to be aware of:
 
 ## Develop
 
-Run the test suite (141 unit tests covering the protocol, tools, skills, and the
+Run the test suite (157 unit tests covering the protocol, tools, skills, and the
 agent loop with a mocked Dify client — no network required):
 
 ```bash
@@ -405,7 +450,7 @@ uv run pytest          # or: .venv/bin/pytest
 | `config.py` | Load `.env` / env settings |
 | `dify_client.py` | Dify chat-messages wrapper (streaming + blocking) + image upload |
 | `protocol.py` | Tool-call preamble + parse/format |
-| `tools.py` | `read_file` (whole or line-range), `search_text` (regex grep), `list_dir`, `write_file`, `edit_file`, `run_shell`, `use_skill` |
+| `tools.py` | `read_file` (whole or line-range), `search_text` (regex grep), `view_image`, `list_dir`, `write_file`, `edit_file`, `run_shell`, `use_skill` |
 | `skills.py` | Discover/parse Markdown skills, load on demand |
 | `agent.py` | The ReAct loop |
 | `cli.py` | REPL, argument parsing, confirmations, rendering |

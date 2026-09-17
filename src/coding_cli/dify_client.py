@@ -9,11 +9,19 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 import requests
+
+
+def _debug(label: str, payload) -> None:
+    """Print request/response detail to stderr when CODING_CLI_DEBUG is set."""
+    if os.environ.get("CODING_CLI_DEBUG"):
+        print(f"[dify:{label}] {payload}", file=sys.stderr, flush=True)
 
 # Image attachments (Dify vision input). Dify accepts these for image files;
 # the app itself must have Vision enabled for the model to actually see them.
@@ -50,6 +58,7 @@ class DifyClient:
         self.timeout = timeout
         self.conversation_id: str = ""
         self._session = requests.Session()
+        self._parameters: Optional[dict] = None  # cached GET /parameters
 
     def reset(self) -> None:
         """Start a fresh Dify conversation on the next call."""
@@ -75,6 +84,46 @@ class DifyClient:
         if stream:
             return self._chat_streaming(query, on_delta, files)
         return self._chat_blocking(query, files)
+
+    def app_parameters(self) -> dict:
+        """Fetch (and cache) the Dify app's published parameters.
+
+        Used to tell the user up front whether the app accepts image uploads at
+        all. Any failure caches an empty dict so this never blocks a turn.
+        """
+        if self._parameters is None:
+            try:
+                resp = self._session.get(
+                    f"{self.base_url}/parameters",
+                    headers=self._auth_headers,
+                    params={"user": self.user_id},
+                    timeout=self.timeout,
+                )
+                self._parameters = resp.json() if resp.status_code < 400 else {}
+            except (requests.RequestException, ValueError):
+                self._parameters = {}
+            _debug("parameters", self._parameters)
+        return self._parameters
+
+    def image_upload_enabled(self) -> Optional[bool]:
+        """Whether the app accepts image uploads: True/False, or None if unknown.
+
+        Handles both the ``file_upload.image.enabled`` shape and the newer
+        ``file_upload.enabled`` + ``allowed_file_types`` shape. ``None`` means the
+        app did not say, so callers should not warn.
+        """
+        upload = self.app_parameters().get("file_upload")
+        if not isinstance(upload, dict):
+            return None
+        image = upload.get("image")
+        if isinstance(image, dict) and "enabled" in image:
+            return bool(image["enabled"])
+        if "enabled" in upload:
+            if not upload["enabled"]:
+                return False
+            types = upload.get("allowed_file_types") or []
+            return (not types) or ("image" in types)
+        return None
 
     def upload_file(self, path: "Path | str") -> str:
         """Upload a local image to Dify and return its file id.
@@ -123,6 +172,7 @@ class DifyClient:
             data = resp.json()
         except ValueError as exc:
             raise DifyError(f"Invalid JSON from Dify upload: {exc}") from exc
+        _debug("upload", data)
         file_id = data.get("id")
         if not file_id:
             raise DifyError(f"Dify upload returned no file id: {data}")
@@ -157,6 +207,7 @@ class DifyClient:
         }
         if files:  # omit entirely when unused, keeping the plain request shape
             body["files"] = list(files)
+            _debug("chat.files", body["files"])
         return body
 
     def _chat_blocking(

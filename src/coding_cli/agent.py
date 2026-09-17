@@ -20,6 +20,9 @@ ReporterFn = Callable[[str, str], None]
 # from flooding the screen mid-loop).
 MAX_NOTE_CHARS = 600
 
+# Cap on images attached in a single turn (guards a runaway view_image loop).
+MAX_IMAGES_PER_TURN = 4
+
 # The fenced tool-call sentinel; streamed text from here on is suppressed so the
 # user never sees the raw tool JSON.
 _STREAM_SENTINEL = "```tool"
@@ -156,7 +159,7 @@ class Agent:
         """Unified diff of every file changed this session."""
         return self.history.session_diff()
 
-    def _tool_context(self) -> tools.ToolContext:
+    def _tool_context(self, attach_image=None) -> tools.ToolContext:
         return tools.ToolContext(
             workdir=self.workdir,
             confirm=self.confirm,
@@ -164,6 +167,7 @@ class Agent:
             history=self.history,
             deny=self.deny,
             mode=self.mode,
+            attach_image=attach_image,
         )
 
     def _preamble(self) -> str:
@@ -178,6 +182,13 @@ class Agent:
         """
         if not images:
             return []
+        if self.client.image_upload_enabled() is False and self.report is not None:
+            self.report(
+                "note",
+                "Warning: this Dify app reports image upload disabled, so the "
+                "model will not see the image. Enable Vision / file upload in "
+                "the Dify app settings.",
+            )
         ctx = self._tool_context()
         descriptors = []
         for path in images:
@@ -215,7 +226,10 @@ class Agent:
         else:
             query = user_input
 
-        ctx = self._tool_context()
+        # view_image appends here; the loop uploads and attaches after each call.
+        queued_images: List[str] = []
+        attached_count = len(pending_files)
+        ctx = self._tool_context(attach_image=queued_images.append)
         for _ in range(self.max_tool_iters):
             streaming = self.sink is not None and self.stream
             emitter = StreamEmitter(self.sink) if streaming else None
@@ -242,6 +256,22 @@ class Agent:
                     self.report("note", note[:MAX_NOTE_CHARS])
             self._announce(call)
             output = tools.execute(ctx, call.name, call.args)
+            if queued_images:
+                # An image cannot ride in the text result, so upload it and
+                # attach it to the request that carries this TOOL_RESULT.
+                if attached_count + len(queued_images) > MAX_IMAGES_PER_TURN:
+                    output += (
+                        f"\n[Not attached: at most {MAX_IMAGES_PER_TURN} images "
+                        "may be viewed per turn.]"
+                    )
+                else:
+                    try:
+                        pending_files = self._upload_images(queued_images)
+                        attached_count += len(queued_images)
+                    except Exception as exc:  # report back instead of aborting
+                        pending_files = []
+                        output += f"\n[Could not attach the image: {exc}]"
+                queued_images.clear()
             self._announce_result(call.name, output)
             query = protocol.format_tool_result(call.name, output)
 

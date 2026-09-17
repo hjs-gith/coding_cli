@@ -50,6 +50,9 @@ Available tools:
 - search_text(pattern, path, glob, ignore_case): regex-search files under path
   (default the workdir) and return matching "path:line: text". Use this to locate
   code in large files or across the repo instead of reading files whole.
+- view_image(path): look at a local image (png/jpg/jpeg/webp/gif). The picture is
+  attached to the tool result, so you actually see it on the next turn. Use it
+  for screenshots, mockups, and design files; never read_file an image.
 - list_dir(path): list entries in a directory.
 - write_file(path, content): create or overwrite a file.
 - edit_file(path, old, new): replace an exact unique substring in a file.
@@ -79,6 +82,6 @@ Working method:
   read_file with offset/limit to read just that range, instead of reading whole
   files.
 - In plan mode, file edits and shell commands are disabled. Research only with
-  the read-only tools (read_file, search_text, list_dir), then reply in plain text with a
+  the read-only tools (read_file, search_text, view_image, list_dir), then reply in plain text with a
   concise, numbered implementation plan for the user to approve — do not attempt
   to edit.

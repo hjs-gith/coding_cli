@@ -153,6 +153,52 @@ def test_upload_file_rejects_oversized(monkeypatch, tmp_path):
     assert "limit is" in str(exc.value)
 
 
+def test_image_upload_enabled_legacy_shape(monkeypatch):
+    client = _client()
+    monkeypatch.setattr(
+        client._session, "get",
+        lambda *a, **k: _JsonResponse({"file_upload": {"image": {"enabled": True}}}),
+    )
+    assert client.image_upload_enabled() is True
+
+
+def test_image_upload_disabled_is_detected(monkeypatch):
+    client = _client()
+    monkeypatch.setattr(
+        client._session, "get",
+        lambda *a, **k: _JsonResponse({"file_upload": {"image": {"enabled": False}}}),
+    )
+    assert client.image_upload_enabled() is False
+
+
+def test_image_upload_enabled_new_shape(monkeypatch):
+    client = _client()
+    monkeypatch.setattr(
+        client._session, "get",
+        lambda *a, **k: _JsonResponse(
+            {"file_upload": {"enabled": True, "allowed_file_types": ["image"]}}
+        ),
+    )
+    assert client.image_upload_enabled() is True
+
+
+def test_image_upload_unknown_when_app_is_silent(monkeypatch):
+    client = _client()
+    monkeypatch.setattr(client._session, "get", lambda *a, **k: _JsonResponse({}))
+    assert client.image_upload_enabled() is None  # unknown -> caller must not warn
+
+
+def test_app_parameters_survives_network_error(monkeypatch):
+    client = _client()
+
+    def boom(*a, **k):
+        raise dify_client.requests.RequestException("down")
+
+    monkeypatch.setattr(client._session, "get", boom)
+    assert client.app_parameters() == {}
+    assert client.image_upload_enabled() is None
+
+
 def test_upload_file_error_hints_at_vision(monkeypatch, tmp_path):
     client = _client()
     png = _png(tmp_path)

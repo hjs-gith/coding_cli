@@ -17,6 +17,7 @@ from typing import Iterable, Optional
 KNOWN_TOOLS = {
     "read_file",
     "search_text",
+    "view_image",
     "list_dir",
     "write_file",
     "edit_file",
@@ -72,6 +73,11 @@ Available tools:
   text". Use this to locate code in large files or across the repo instead of
   reading files whole. glob filters by path (e.g. "*.py"); ignore_case for a
   case-insensitive match.
+- view_image(path): look at a local image (png/jpg/jpeg/webp/gif). The picture is
+  attached to the tool result, so you actually see it on the next turn — call
+  this whenever the task involves a screenshot, mockup, or any image file, and
+  then continue by describing or acting on what you see. Never try to read an
+  image with read_file; it returns binary garbage.
 - list_dir(path): list entries in a directory.
 - write_file(path, content): create or overwrite a file.
 - edit_file(path, old, new): replace an exact unique substring in a file. `old`

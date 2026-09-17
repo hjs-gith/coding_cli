@@ -201,6 +201,22 @@ def _handle_image(agent: Agent, line: str) -> None:
             continue
         agent.pending_images.append(raw)
         ui.notice(f"Attached {raw} — sent with your next message.")
+    if agent.pending_images:
+        _warn_if_vision_disabled(agent)
+
+
+def _warn_if_vision_disabled(agent: Agent) -> None:
+    """Tell the user up front when the Dify app won't accept image uploads."""
+    try:
+        if agent.client.image_upload_enabled() is False:
+            ui.warn(
+                "This Dify app reports image upload disabled, so the model will "
+                "not see the image. Enable Vision / file upload in the Dify app "
+                "settings (Features -> Vision) and make sure the app's model "
+                "supports images."
+            )
+    except Exception:  # a diagnostic must never break the command
+        pass
 
 
 def _handle_command(agent: Agent, line: str) -> bool:

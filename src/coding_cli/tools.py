@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
 
+from .dify_client import IMAGE_EXTS, MAX_IMAGE_BYTES
 from .history import DIR_NAME as HISTORY_DIR
 
 if TYPE_CHECKING:
@@ -72,6 +73,9 @@ class ToolContext:
     deny: tuple[str, ...] = ()
     # Permission mode governing mutating tools (see MODE_* constants).
     mode: str = MODE_DEFAULT
+    # Callback used by ``view_image`` to queue a local image for upload; the
+    # agent attaches queued images to the next request. ``None`` disables the tool.
+    attach_image: Optional[Callable[[str], None]] = None
 
 
 def _reserved_paths(ctx: ToolContext) -> "list[tuple[Path, str]]":
@@ -366,6 +370,37 @@ def run_shell(ctx: ToolContext, command: str) -> str:
     return _truncate("\n".join(parts))
 
 
+def view_image(ctx: ToolContext, path: str) -> str:
+    """Queue a local image so the model actually sees it on the next message.
+
+    Read-only. The image itself cannot travel in a text tool result, so this
+    validates the file and hands it to the agent, which uploads it and attaches
+    it to the next request. The model sees the picture on the following turn.
+    """
+    if ctx.attach_image is None:
+        raise ToolError("Viewing images is not available in this session.")
+    target = _resolve(ctx, path)
+    if not target.is_file():
+        raise ToolError(f"No such file: {path}")
+    suffix = target.suffix.lower()
+    if suffix not in IMAGE_EXTS:
+        raise ToolError(
+            f"Not a supported image: {path}. "
+            f"Supported: {', '.join(sorted(IMAGE_EXTS))}."
+        )
+    size = target.stat().st_size
+    if size > MAX_IMAGE_BYTES:
+        raise ToolError(
+            f"{path} is {size / 1_048_576:.1f} MB; the limit is "
+            f"{MAX_IMAGE_BYTES // 1_048_576} MB."
+        )
+    ctx.attach_image(str(target))
+    return (
+        f"Attached {path}. The image is included with this result, so you can "
+        "see it now — continue by describing or analyzing it."
+    )
+
+
 def use_skill(ctx: ToolContext, name: str) -> str:
     if ctx.load_skill is None:
         raise ToolError("Skills are not available in this session.")
@@ -377,6 +412,7 @@ def use_skill(ctx: ToolContext, name: str) -> str:
 _DISPATCH: dict[str, Callable[..., str]] = {
     "read_file": read_file,
     "search_text": search_text,
+    "view_image": view_image,
     "list_dir": list_dir,
     "write_file": write_file,
     "edit_file": edit_file,

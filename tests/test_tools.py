@@ -281,6 +281,64 @@ def test_search_text_rejects_escape(tmp_path):
     assert out.startswith("ERROR")
 
 
+# --- view_image -------------------------------------------------------------
+
+def _png(path):
+    path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+
+
+def image_ctx(tmp_path, queue, **kw):
+    return ToolContext(workdir=tmp_path, attach_image=queue.append, **kw)
+
+
+def test_view_image_queues_absolute_path(tmp_path):
+    _png(tmp_path / "shot.png")
+    queue = []
+    out = tools.execute(image_ctx(tmp_path, queue), "view_image", {"path": "shot.png"})
+    assert queue == [str(tmp_path / "shot.png")]
+    assert "Attached shot.png" in out
+
+
+def test_view_image_rejects_non_image(tmp_path):
+    (tmp_path / "a.txt").write_text("x")
+    queue = []
+    out = tools.execute(image_ctx(tmp_path, queue), "view_image", {"path": "a.txt"})
+    assert out.startswith("ERROR")
+    assert queue == []
+
+
+def test_view_image_missing_file(tmp_path):
+    queue = []
+    out = tools.execute(image_ctx(tmp_path, queue), "view_image", {"path": "no.png"})
+    assert out.startswith("ERROR")
+    assert queue == []
+
+
+def test_view_image_rejects_escape(tmp_path):
+    queue = []
+    out = tools.execute(image_ctx(tmp_path, queue), "view_image", {"path": "../x.png"})
+    assert out.startswith("ERROR")
+    assert queue == []
+
+
+def test_view_image_respects_denylist(tmp_path):
+    (tmp_path / ".git").mkdir()
+    _png(tmp_path / ".git" / "s.png")
+    queue = []
+    c = ToolContext(workdir=tmp_path, attach_image=queue.append, deny=(".git",))
+    out = tools.execute(c, "view_image", {"path": ".git/s.png"})
+    assert out.startswith("ERROR")
+    assert "protected" in out
+    assert queue == []
+
+
+def test_view_image_unavailable_without_callback(tmp_path):
+    _png(tmp_path / "shot.png")
+    out = tools.execute(ctx(tmp_path), "view_image", {"path": "shot.png"})
+    assert out.startswith("ERROR")
+    assert "not available" in out
+
+
 def test_run_shell(tmp_path):
     out = tools.execute(ctx(tmp_path), "run_shell", {"command": "echo hi"})
     assert "exit code: 0" in out
